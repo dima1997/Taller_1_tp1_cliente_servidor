@@ -1,0 +1,18 @@
+// Prueba 1
+Ejecutar:
+valgrind ./client 127.168.000.1 8080 request-firefox.txt
+=>
+No deberia haber errores del valgrind.
+Deberia imprimir el contenido de request-firefox.txt
+
+//Prueba 2
+Ejecutar: 
+valgrind ./client 127.168.000.1 8080 request-firefox.txt gato
+valgrind ./client 127.168.000.1
+=> 
+No errores valgrind.
+Deberia imprimir (en ambos casos):
+Uso:
+./client <direccion> <puerto> [<input>]
+
+
