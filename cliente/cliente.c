@@ -103,8 +103,8 @@ vector_t *cargar_peticion(FILE* archivoPeticion){
 
         if (i >= largoPeticion){
             size_t nuevoLargo = largoPeticion*2;
-            bool se_redimensiono = vector_redimensionar(peticion, nuevoLargo);
-            if (!se_redimensiono) {
+            bool seRedimensiono = vector_redimensionar(peticion, nuevoLargo);
+            if (!seRedimensiono) {
                 vector_destruir(peticion);
                 return NULL;
             }
@@ -115,8 +115,8 @@ vector_t *cargar_peticion(FILE* archivoPeticion){
         caracterAnterior = caracter;
     }
     size_t largoFinal = i;
-    bool se_redimensiono = vector_redimensionar(peticion, largoFinal);
-    if (!se_redimensiono) {
+    bool seRedimensiono = vector_redimensionar(peticion, largoFinal);
+    if (!seRedimensiono) {
         vector_destruir(peticion);
         return NULL;
         }
