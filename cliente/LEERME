@@ -1,2 +1,0 @@
-Hay que adaptar el vector dinamico para que funcion con "char", en lugar de con "int".
-Y usar dicho vector dinamico para cargar las lineas del archivo en memoria.

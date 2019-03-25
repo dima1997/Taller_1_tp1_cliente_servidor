@@ -9,7 +9,8 @@ servidor estará escuchando la conexión TCP.
 */
 
 //1ero: Abrir archivo e imprimirlo en pantalla
-#define _POSIX_C_SOURCE 200112L
+//#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -69,6 +70,59 @@ vector_t *cargar_peticion(FILE* archivoPeticion){
         }
     return peticion;
     }
+/*
+Pre: recibe un archivo de texto ya abierto.
+Post: Devuelve una cadena de caracteres (terminada en \0) que 
+contiene todos los carateres del archivo desde el inicio hasta
+una linea vacia o fin de archivo; o NULL si hubo algun error 
+durante la carga.
+Queda a respondabilidad del usuario liberar la memoria reservada 
+para la cadena, por medio de free
+*/
+char *cargar_archivo(FILE *archivo){
+    size_t factorRedimension = 2;
+    size_t largoTexto = 1000;
+    size_t tamanioInicial = largoTexto * sizeof(char);
+    char *texto = (char *)malloc(tamanioInicial);
+    if (texto == NULL){
+        return NULL;
+    }
+
+    char caracter;
+    char caracterAnterior = '\0';
+    size_t i = 0; 
+    while ((caracter = getc(archivo)) != -1){ //eof
+        if (caracter == '\n') {
+            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
+                //Una linea vacia marca el final de la peticion
+                //Para cuando archivoPeticion es stdin
+                break;
+            }
+        }
+        if (i >= largoTexto){
+            size_t nuevoLargo = largoTexto*sizeof(char)*factorRedimension;
+            char *nuevoTexto = realloc(texto, nuevoLargo);
+            if (nuevoTexto == NULL) {
+                free(texto);
+                return NULL;
+            }
+            largoTexto = nuevoLargo;
+        }
+        texto[i] = caracter;
+        ++i;
+        caracterAnterior = caracter;
+    }
+    size_t largoFinal = i+1;
+    char *textoFinal = realloc(texto, largoFinal);
+    if (textoFinal == NULL) {
+        free(texto);
+        return NULL;
+    }
+    texto = textoFinal;
+    texto[i] = '\0';
+    return texto;
+}
+
 
 int main(int argc, const char* argv[]) {
     if (argc < 3 || argc > 4) {
@@ -77,10 +131,12 @@ int main(int argc, const char* argv[]) {
     }
     const char *nombreHost = argv[1];
     const char *nombrePuerto = argv[2];
-    vector_t *peticionVector;
+    //vector_t *peticionVector;
+    char *peticion;
     if (argc == 3) {
-        peticionVector = cargar_peticion(stdin);
-            if (peticionVector == NULL){
+        //peticionVector = cargar_peticion(stdin);
+        peticion = cargar_archivo(stdin);
+            if (peticion == NULL){ //peticionVector
             return 1;
         }
     } else {
@@ -90,9 +146,10 @@ int main(int argc, const char* argv[]) {
             fprintf(stderr, "Archivo no encontrado.\n");
             return 1;
         }
-        peticionVector = cargar_peticion(archivoPeticion);
+        //peticionVector = cargar_peticion(archivoPeticion);
+        peticion = cargar_archivo(archivoPeticion);
         fclose(archivoPeticion);
-        if (peticionVector == NULL){
+        if (peticion == NULL){ //peticionVector
             return 1;
         }
     }
@@ -102,7 +159,7 @@ int main(int argc, const char* argv[]) {
     struct addrinfo hints;
     struct addrinfo *direcciones, *ptr;
     int skt = 0;
-    estado = getaddrinfo(nombreHost, nombrePuerto, &hints, &direcciones);
+
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;     //IPv4
     hints.ai_socktype = SOCK_STREAM;  //TCP
@@ -131,23 +188,29 @@ int main(int argc, const char* argv[]) {
     }
     //----------------------------------------------------------------
     // cargamos en un buffer el la peticion a enviar
+    /*
     size_t largoPeticion = vector_obtener_tamanio(peticionVector);
     char buffer[MENSAJE_LARGO_MAXIMO];
     for (int i = 0; i < largoPeticion; ++i) {
         vector_obtener(peticionVector, i, &buffer[i]);
     }
     vector_destruir(peticionVector);
+    */
     //----------------------------------------------------------------
     int bytesEnviados;
-    bytesEnviados = enviar_mensaje(skt, buffer, largoPeticion);
-    if (bytesEnviados < largoPeticion){
+    size_t largoPeticion = strlen(peticion);
+    bytesEnviados = enviar_mensaje(skt, peticion, largoPeticion); //buffer
+    if (bytesEnviados < 0){
         shutdown(skt, SHUT_RDWR);
         close(skt);
+        printf("Aqui\n");
         return 1;
     }
 
     shutdown(skt, SHUT_WR);
-    
+    free(peticion);
+
+    char buffer[MENSAJE_LARGO_MAXIMO];
     size_t largoMaximo = MENSAJE_LARGO_MAXIMO;
     int bytesRecibidos;
     bytesRecibidos = recibir_mensaje(skt, buffer, largoMaximo-1);
@@ -157,7 +220,7 @@ int main(int argc, const char* argv[]) {
     if (bytesRecibidos < 0) {
         return 1;   
     } else {
-        buffer[bytesRecibidos] = "\0";
+        buffer[bytesRecibidos] = '\0';
         printf("%s\n", buffer);
         return 0;
     }

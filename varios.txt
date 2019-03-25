@@ -1,0 +1,78 @@
+/*
+    size_t largoDato = strlen(dato);
+
+    FILE *archivoTemplate; 
+    if ((archivoTemplate = fopen(ruta_template, "rt")) == NULL) {
+        fprintf(stderr, "Archivo template no encontrado.\n");
+        return 1;
+    }
+    char* linea = NULL; 
+    size_t capacidadLinea = 0; 
+    ssize_t cantidadCaracteres;
+
+    largoVector = 200;
+    	
+    vector_t *templateVector = vector_crear(largoVector);
+    	
+    if (templateVector == NULL){
+   		free_strv(lineaSplit);
+   		free(linea);
+       	fclose(archivoTemplate);
+       	printf("Error al cargar template\n");
+       	return 1;
+   	}
+    	
+   	size_t posicionVector = 0;
+    size_t factorRedimensionar = 2;
+
+    while((cantidadCaracteres = getline(&linea,&capacidadLinea,archivo)) > 0){
+        char** lineaSplit = split(linea, "{{datos}}");
+        if (lineaSplit == NULL){
+        	free(linea);
+        	fclose(archivoTemplate);
+        	printf("Error al cargar template\n");
+        	return NULL;
+        }
+
+        if (posicionVector + cantidadCaracteres + largoDato >= largoVector) {
+            size_t nuevoLargoVector = (posicionVector + cantidadCaracteres + largoDato) * factorRedimensionar;
+            bool seRedimensiono = vector_redimensionar(templateVector, nuevoLargoVector);
+            if (!seRedimensiono){
+                vector_destruir(templateVector);
+                free_strv(lineaSplit);
+                free(linea);
+                fclose(archivoTemplate);
+                return NULL;
+            }
+            largoVector = nuevoLargoVector;
+        }
+
+   		for (int j = 0; lineaSplit[0][j] != "\0"; ++j){
+    		vector_guardar(templateVector, posicionVector, &lineaSplit[0][j]);
+    		++posicionVector;
+    	}
+    	
+    	for (int i = 1; lineaSplit[i] != NULL, ++i){
+    	
+    		for (int j = 0; datos[j] != "\0", ++j){
+    			vector_guardar(templateVector, posicionVector, &datos[j]);
+    			++posicionVector;
+    		}
+    	
+    		for (int j = 0; lineaSplit[i][j] != "\0"; ++j){
+    			vector_guardar(templateVector, posicionVector, &lineaSplit[i][j]);
+    			++posicionVector;
+    		}
+    	}
+        free_strv(lineaSplit);
+    }
+    free(linea);
+    fclose(archivoTemplate)
+    size_t largoFinalVector = posicionVector;
+    bool seRedimensiono = vector_redimensionar(templateVector, nuevoLargoVector);
+    if (!seRedimensiono){
+        vector_destruir(templateVector);   
+        return NULL;
+    }
+    return templateVector;
+*/
