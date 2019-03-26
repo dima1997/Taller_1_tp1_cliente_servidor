@@ -117,3 +117,76 @@ void vector_imprimir(vector_t *vector){
         ++i;
     }
 }
+
+/*
+Pre: Recibe un socket ya conectado: skt (int), y un puntero al 
+mensaje que a enviar (char *).
+Post: Devuelve la cantidad de bytes enviados del mensaje, o -1 
+en caso de un error en el socket o si el socket remoto 
+fue cerrado.
+*/
+int enviar_mensaje(int skt, char *mensaje, size_t largoMensaje) {
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    bool estaSocketRemotoCerrado = false;
+    int bytesEnviados = 0;
+    
+    while (bytesEnviados < largoMensaje && hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
+        estado = send(skt, &mensaje[bytesEnviados], largoMensaje - bytesEnviados, MSG_NOSIGNAL);
+        if (estado < 0) { 
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
+        }
+        else if (estado == 0) { 
+            estaSocketRemotoCerrado = true;
+        }
+        else {
+            bytesEnviados += estado;
+        }
+    }
+    if (!(estaSocketRemotoCerrado || hayErrorDeSocket)) {
+        return bytesEnviados;
+    } else {
+        return -1;
+    }
+}
+
+/*
+Pre: recibe un socket ya conectado: skt (int), y
+recibe un puntero al buffer donde guardar el mensaje
+recibido.
+Post: Devuelve la cantidad de bytes recibidos del mensaje,
+o -1, dado algun error de socket.
+*/
+int recibir_mensaje(int skt, char *mensaje, size_t largoMaximoMensaje) {
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    bool estaSocketRemotoCerrado = false;
+    int bytesRecibidos = 0;
+
+    while (hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
+        estado = recv(skt, &mensaje[bytesRecibidos], largoMaximoMensaje - bytesRecibidos - 1, MSG_NOSIGNAL);
+
+        if (estado < 0) {
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
+        }
+        else if (estado == 0) {
+            //Suponemos que termino de recibir el mensaje 
+            // y que no se cerró por otra razon
+            estaSocketRemotoCerrado = true;
+        }
+        else {
+            bytesRecibidos = estado; 
+            mensaje[bytesRecibidos] = 0;
+            printf("%s", mensaje);
+            bytesRecibidos = 0; 
+        }
+    }
+
+    if (!hayErrorDeSocket) {
+        return bytesEnviados;
+    } else {
+        return -1;
+    }
+}

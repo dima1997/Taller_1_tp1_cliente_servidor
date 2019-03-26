@@ -44,7 +44,7 @@ CFLAGS = -Wall -Werror -pedantic -pedantic-errors
 #CFLAGS += -O3
 
 # Para valgrind o debug
-CFLAGS += -ggdb -DDEBUG -fno-inline
+CFLAGS += -g -ggdb -DDEBUG -fno-inline
 
 # Opciones del enlazador.
 #LDFLAGS =

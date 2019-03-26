@@ -32,53 +32,6 @@ descripción es "Bad request".
 Si el petitorio es válido, pero el recurso buscado no es válido, el status es "404" y la descripción
 es "Not found".
 
-
-// Sensor
-Los datos del sensor de temperatura son simulados por un archivo binario. Este archivo está
-compuesto por números de 16 bits en formato ​ big-endian ​ . Los mismos se interpretan de la
-siguiente forma: Temperatura = (datos - 2000) / 100.
-Ejemplo:
-Dado el archivo cuyo contenido es: ​ 10 00 03 E8​ , (4 bytes),
-extraigo 2 números de 16 bits cada uno: ​ 0x1000​ (4096) y ​ 0x03E8​ (1000),
-que corresponden a las temperaturas "20.96" y "-10.00" respectivamente.
-Nótese que el archivo tiene 4 bytes: la notación ​ 10 00 03 E8​ es solo para
-representar el contenido del mismo (binario) en números hexadecimal.
-
-
-// template
-El archivo ​ template ​ es un archivo de texto con la plantilla de respuesta del servidor. El mismo
-posee código HTML, y en alguna parte del archivo el texto ​ {{datos}}​ . Este texto será
-suplantado por la temperatura leída por el sensor.
-
-
-
-// Servidor
-El servidor se ejecuta con la siguiente línea de comandos:
-./server ​ <port> <sensor-filename> <template-filename>
-Donde ​ <port>​ es el puerto de escucha del servidor, ​ <sensor-filename>​ es el nombre del
-archivo del sensor, y ​ <template-filename>​ es el template HTML para responder los petitorios
-HTTP exitosos.
-
-
-Si el servidor tiene un número de parámetros incorrecto, se imprime por salida de error
-estándar lo siguiente:
-Uso:
-./server <puerto> <input> [<template>]
-
-
-El servidor no recibe información de la entrada estándar. Luego de finalizar la lectura de datos
-del sensor, escribe por salida estándar un resumen de los navegadores que visitaron al
-dispositivo.
-El informe del servidor posee el siguiente formato:
-# Estadisticas de visitantes
-* <nombre-agente-1>: <cantidad-visitas>
-* <nombre-agente-2>: <cantidad-visitas>
-* <nombre-agente-n>: <cantidad-visitas>
-Los agentes se numeran según el ​ orden de aparición​ .
-
-
-Tanto el cliente como el servidor deben retornar ​ 0 ​ si todo salió correctamente o ​ 1 ​ en caso
-contrario.
 */
 #define _POSIX_C_SOURCE 200809L 
 //#define _POSIX_C_SOURCE 200112L
@@ -185,6 +138,56 @@ vector_t *cargar_template(const char *ruta_template, char *dato){
     }
     return templateVector;
 }
+
+/*
+Pre: Recibe dos cadenas de caracteres terminadas en \0: 
+un texto (char *) y una palabra (char *) que este en el 
+primero.
+Post: Devuelve un arreglo dinamico a dos cadenas de 
+caracteres que corresponden a la parte del texto que 
+viene antes de la palabra recibida (primera cadena) y a 
+la que viene despues de la misma (segunda cadena). El
+arreglo termina en NULL. Si ocurrio algun error devuelve
+NULL. 
+Queda a responsabilidad del usuario liberar la memoria 
+reservada para cada cadena y para el arreglo en si, por
+medio de la funcion free().
+*/
+char **partir_texto(char *texto, char *palabra) {
+    char *posicionPalabra = strstr(texto, palabra);
+    size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
+    char *primerParte = malloc(memoriaReservar);
+    if (primerParte == NULL) {
+        return NULL;
+    } 
+    strncpy(primerParte, texto, posicionPalabra);
+    primerParte[posicionPalabra] = '\0';
+    size_t largoTexto = strlen(texto);
+    size_t largoPalabra = strlen(palabra);
+    size_t largoSegundaParte = largoTexto - largoPalabra - posicionPalabra;
+    memoriaReservar = sizeof(char)*(largoSegundaParte+1);
+    char *segundaParte = malloc(memoriaReservar);
+    if (segundaParte == NULL) {
+        free(primerParte);
+        return NULL;
+    }
+    posicionSegundaParte = posicionPalabra + largoPalabra;
+    for (int i = posicionSegundaParte; i<largoTexto; ++i){
+        segundaParte[i - posicionSegundaParte] = texto[i];
+    }
+    segundaParte[largoSegundaParte] = '\0';
+    char **ambasPartes = malloc(sizeof(char*)*3) // 2 partes + 1 \0
+    if (ambasPartes == NULL){
+        free(segundaParte);
+        free(primerParte);
+        return NULL;
+    }
+    ambasPartes[0] = primerParte;
+    ambasPartes[1] = segundaParte;
+    ambasPartes[2] = NULL;
+    return ambasPartes;
+
+} 
 
 /*
 // Sensor
@@ -297,6 +300,74 @@ short int **cargar_binario(const char *rutaBinario){
     punteroArreglo = nuevoPunteroArreglo;
     return punteroArreglo;
 }
+/*
+typedef struct recursoVisitado {
+    char *recursoVisitado;
+    size_t vecesVisitado;
+} recursoVisitado_t;
+*/
+/*
+Pre: recibe una cadena de caracteres con la peticion a responder 
+(char *) terminada en '\0'.
+Post: devuelve una cadena de caractares guardados en memoria 
+reservada, con la respuesta a la peticion recibida; o NULL si 
+hubo algun error.
+*/
+char *responder_peticion(char *peticion, char *temperatura, const char *template) {
+    char *status = "HTTP/1.1 %s %s\n\n\0";
+    size_t i;
+    for (i = 0; peticion[i] != '\n'; ++i) {}
+    char *primerLinea = malloc(sizeof(char)*(i+1));
+    if (primerLinea == NULL){
+        return NULL;
+    }
+    strncpy(primerLinea, peticion, i);
+    primerLinea[i] = '\0';
+    char **argumentosMetodo = split(primerLinea, ' ');
+    free(primerLinea);
+    if (argumentosMetodo == NULL) {
+        return NULL;
+    }
+    char *metodo = argumentosMetodo[0];
+    char *recurso = argumentosMetodo[1];
+    for (i=0; argumentosMetodo[i]!=NULL; ++i) {}
+    int cantidadArgumentos = i;
+    bool cantArgumentosCorrecta = (cantidadArgumentos == 3);
+    bool metodoCorrecto = (strcmp(metodo, "GET")==0);
+    char cabecera[30];
+    size_t largoCabecera = sizeof(cabecera);
+    if (!(cantArgumentosCorrecta && metodoCorrecto)) {
+        snprintf(cabecera, largoCabecera, status, "400", "Bad request");
+    } else if (strcmp(recurso, "/sensor")!=0) {
+        snprintf(cabecera, largoCabecera, status, "404", "Not found");
+    } else {
+        snprintf(cabecera, largoCabecera, status, "200", "OK");
+    }
+    free_strv(argumentosMetodo);
+    largoCabecera = strlen(cabecera);
+    char cuerpo[MENSAJE_LARGO_MAXIMO];
+    vector_t *templateVector;
+    templateVector = cargar_template(template, temperatura);
+    if (templateVector == NULL){
+        fprintf(stderr, "Error al cargar el template.\n");
+        return NULL;
+    }
+    size_t largoTemplate = vector_obtener_tamanio(templateVector);
+    for (int i = 0; i < largoTemplate; ++i) {
+        vector_obtener(templateVector, i, &cuerpo[i]);
+    }
+    vector_destruir(templateVector);
+    cuerpo[largoTemplate] = '\0';
+    size_t memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 1);
+    char *respuesta = (char *)malloc(memoriaReservar);
+    if (respuesta == NULL) {
+        return NULL;
+    }
+    respuesta[0] = '\0';
+    strcat(respuesta, cabecera);
+    strcat(respuesta, cuerpo);
+    return respuesta;
+}
 
 int main(int argc, const char *argv[]) {
     if (argc != 4) {
@@ -304,39 +375,13 @@ int main(int argc, const char *argv[]) {
         return 1;
     }
    	const char *nombrePuerto = argv[1];
-    //const char *sensorBinario = argv[2];
+    const char *sensorBinario = argv[2];
     const char *template = argv[3];
-    /*short int **numerosLeidos = cargar_binario(sensorBinario);
+    short int **numerosLeidos = cargar_binario(sensorBinario);
     if (numerosLeidos == NULL) {
         fprintf(stderr, "Error al cargar el binario\n");
         return 1;
     }
-    size_t i;
-    for (i = 0; numerosLeidos[i] != NULL; ++i) {}
-    size_t largoLeidos = i;
-    for (i = 0; numerosLeidos[i] != NULL; ++i) {
-        double temperaturaSensada = (*numerosLeidos[i] - 2000)/100;
-        char temperaturaBuffer[TEMPERATURA_LARGO_MAXIMO];
-        size_t largoBuffer = sizeof(temperaturaBuffer);
-        snprintf(temperaturaBuffer, largoBuffer, "%.2f", temperaturaSensada);
-        vector_t *templateVector;
-        templateVector = cargar_template(template, temperaturaBuffer);
-        if (templateVector == NULL){
-            for (int j = 0; j<largoLeidos+1; ++j){
-                free(numerosLeidos[i]);
-            }
-            free(numerosLeidos);
-            fprintf(stderr, "Error al cargar el template.\n");
-            return 1;
-        }
-        vector_imprimir(templateVector);
-        vector_destruir(templateVector);
-    }
-    for (int j = 0; j<largoLeidos+1; ++j){
-        free(numerosLeidos[j]);
-    }
-    free(numerosLeidos);
-	*/
     //Sockets
     int estado = 0;
     bool seguirEjecutando = true;
@@ -357,6 +402,10 @@ int main(int argc, const char *argv[]) {
 
     if (estado != 0) { 
         printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
+        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+            free(numerosLeidos[i]);
+        }
+        free(numerosLeidos);
         return 1;
     }
 
@@ -365,6 +414,10 @@ int main(int argc, const char *argv[]) {
     if (sktPasivo == -1) {
         printf("Error: %s\n", strerror(errno));
         freeaddrinfo(ptr);
+        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+            free(numerosLeidos[i]);
+        }
+        free(numerosLeidos);
         return 1;
     }
 
@@ -376,6 +429,10 @@ int main(int argc, const char *argv[]) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
         freeaddrinfo(ptr);
+        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+            free(numerosLeidos[i]);
+        }
+        free(numerosLeidos);
         return 1;
     }
 
@@ -387,6 +444,10 @@ int main(int argc, const char *argv[]) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
         freeaddrinfo(ptr);
+        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+            free(numerosLeidos[i]);
+        }
+        free(numerosLeidos);
         return 1;
     }
 
@@ -397,53 +458,58 @@ int main(int argc, const char *argv[]) {
     if (estado == -1) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
+        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+            free(numerosLeidos[i]);
+        }
+        free(numerosLeidos);
         return 1;
     }
-
-    while (seguirEjecutando) {
+    size_t posicionLeidos = 0;
+    while (seguirEjecutando && numerosLeidos[posicionLeidos] != NULL) {
         sktActivo = accept(sktPasivo, NULL, NULL);   // aceptamos un cliente
         if (sktActivo == -1) {
             printf("Error: %s\n", strerror(errno));
             seguirEjecutando = false;
             esLaAceptacionDelSocketValido = false;
         } else {
-            char buffer[MENSAJE_LARGO_MAXIMO];
-            size_t largoMaximo = sizeof(buffer);
-            int bytesRecibidos; 
-            bytesRecibidos = recibir_mensaje(sktActivo, buffer, largoMaximo-1); 
-        
-            buffer[bytesRecibidos] = '\0';
+            char peticion[MENSAJE_LARGO_MAXIMO];
+            size_t largoMaximo = sizeof(peticion);
+            recibir_mensaje(sktActivo, peticion, largoMaximo-1); 
             
-            printf("%s\n", buffer);
+            printf("%s", peticion);
+
+            short int numeroLeido = *numerosLeidos[posicionLeidos];
+            double temperaturaSensada = (numeroLeido - 2000)/100;
+
+            char temperaturaBuffer[TEMPERATURA_LARGO_MAXIMO];
+            size_t largoBuffer = sizeof(temperaturaBuffer);
+            snprintf(temperaturaBuffer, largoBuffer, "%.2f", temperaturaSensada);
             
-            vector_t *templateVector;
-            
-            templateVector = cargar_template(template, "10.00");
-            
-            if (templateVector == NULL){
-            	fprintf(stderr, "Error al cargar el template.\n");
+            char *respuesta = responder_peticion(peticion, temperaturaBuffer, template); 
+            if (respuesta == NULL){
                 shutdown(sktActivo, SHUT_RDWR);
                 close(sktActivo);
-                break;  
+                for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+                    free(numerosLeidos[i]);
+                }
+                free(numerosLeidos);
+                break;
             }
-            
-            size_t largoTemplate = vector_obtener_tamanio(templateVector);
-            
-            for (int i = 0; i < largoTemplate; ++i) {
-                vector_obtener(templateVector, i, &buffer[i]);
-            }
-            
-            vector_destruir(templateVector);
+            size_t largoRespuesta = strlen(respuesta);
 
-            //int bytesEnviados;
-            //bytesEnviados = enviar_mensaje(sktActivo, buffer, largoTemplate); 
-            enviar_mensaje(sktActivo, buffer, largoTemplate);
+            enviar_mensaje(sktActivo, respuesta, largoRespuesta);
             shutdown(sktActivo, SHUT_RDWR);
             close(sktActivo);
-            break;
+            free(respuesta);
+            ++posicionLeidos;
     	}
     }
-   
+    
+    for (int i = 0; numerosLeidos[i]!=NULL; ++i){
+        free(numerosLeidos[i]);
+    }
+    free(numerosLeidos);
+
     shutdown(sktPasivo, SHUT_RDWR);
     close(sktPasivo);
 

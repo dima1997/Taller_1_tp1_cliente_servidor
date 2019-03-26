@@ -5,14 +5,14 @@
 //#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdio.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stddef.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-#include "common.h"
 
 /*******************************************************************
  *                DEFINICION DE LOS TIPOS DE DATOS
@@ -82,4 +82,21 @@ Post: Devuelve true si logro recibir todo el mensaje,
 false en caso contrario, dado algun error de socket.
 */
 bool recibir_mensaje(int skt, char *mensaje, size_t largoMaximoMensaje);
+
+/*
+ * Devuelve en un arreglo dinámico terminado en NULL con todos los subsegmentos
+ * de ‘str’ separados por el carácter ‘sep’. Tanto el arreglo devuelto como las
+ * cadenas que contiene son allocadas dinámicamente.
+ *
+ * Quien llama a la función toma responsabilidad de la memoria dinámica del
+ * arreglo devuelto. La función devuelve NULL si falló alguna llamada a
+ * malloc(), o si ‘sep’ es '\0'.
+ */
+char** split(const char* str, char sep);
+
+/*
+ * Libera un arreglo dinámico de cadenas, y todas las cadenas que contiene.
+ */
+void free_strv(char* strv[]);
+
 #endif // COMMON_H

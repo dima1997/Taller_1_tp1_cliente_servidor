@@ -131,12 +131,11 @@ int main(int argc, const char* argv[]) {
     }
     const char *nombreHost = argv[1];
     const char *nombrePuerto = argv[2];
-    //vector_t *peticionVector;
     char *peticion;
     if (argc == 3) {
-        //peticionVector = cargar_peticion(stdin);
+
         peticion = cargar_archivo(stdin);
-            if (peticion == NULL){ //peticionVector
+            if (peticion == NULL){ 
             return 1;
         }
     } else {
@@ -146,10 +145,10 @@ int main(int argc, const char* argv[]) {
             fprintf(stderr, "Archivo no encontrado.\n");
             return 1;
         }
-        //peticionVector = cargar_peticion(archivoPeticion);
+
         peticion = cargar_archivo(archivoPeticion);
         fclose(archivoPeticion);
-        if (peticion == NULL){ //peticionVector
+        if (peticion == NULL){ 
             return 1;
         }
     }
@@ -185,43 +184,29 @@ int main(int argc, const char* argv[]) {
     freeaddrinfo(direcciones);
     if (estamosConectados == false) {
         return 1; 
-    }
-    //----------------------------------------------------------------
-    // cargamos en un buffer el la peticion a enviar
-    /*
-    size_t largoPeticion = vector_obtener_tamanio(peticionVector);
-    char buffer[MENSAJE_LARGO_MAXIMO];
-    for (int i = 0; i < largoPeticion; ++i) {
-        vector_obtener(peticionVector, i, &buffer[i]);
-    }
-    vector_destruir(peticionVector);
-    */
-    //----------------------------------------------------------------
+
     int bytesEnviados;
     size_t largoPeticion = strlen(peticion);
     bytesEnviados = enviar_mensaje(skt, peticion, largoPeticion); //buffer
     if (bytesEnviados < 0){
         shutdown(skt, SHUT_RDWR);
         close(skt);
-        printf("Aqui\n");
         return 1;
     }
 
     shutdown(skt, SHUT_WR);
     free(peticion);
 
-    char buffer[MENSAJE_LARGO_MAXIMO];
-    size_t largoMaximo = MENSAJE_LARGO_MAXIMO;
+    char respuesta[MENSAJE_LARGO_MAXIMO];
+    size_t largoMaximo = sizeof(respuesta);
     int bytesRecibidos;
-    bytesRecibidos = recibir_mensaje(skt, buffer, largoMaximo-1);
+    bytesRecibidos = recibir_mensaje(skt, respuesta, largoMaximo-1);
     shutdown(skt, SHUT_RDWR);
     close(skt);
     
     if (bytesRecibidos < 0) {
         return 1;   
     } else {
-        buffer[bytesRecibidos] = '\0';
-        printf("%s\n", buffer);
         return 0;
     }
 }

@@ -81,10 +81,14 @@ Tanto el cliente como el servidor deben retornar ​ 0 ​ si todo salió correc
 contrario.
 */
 #define _POSIX_C_SOURCE 200809L 
+//#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdlib.h>
 #include "common.h"
 #include <arpa/inet.h>
+
+#define TEMPERATURA_LARGO_MAXIMO 100
+#define MENSAJE_LARGO_MAXIMO 1000
 /*
 uint32_t htonl(uint32_t hostlong);
 uint16_t htons(uint16_t hostshort);
@@ -216,6 +220,84 @@ void imprimir_sensor(const char *rutaSensor){
     return;
 }
 
+/*
+Pre: Recibe una ruta (const char *) a un archivo binario, 
+el cual tiene numeros representados por 16 bits.
+Post: Devuelve un puntero a un arreglo de short int, 
+terminado en NULL, cuyos elementos, son cada uno de los 
+numeros del archivo, representados en el endianess de la
+maquina host; o NULL si ocurrio algun problema durante la 
+carga.
+Queda a responsabilidad del usuario liberar la memoria 
+reservada para este arreglo por medio de la funcion
+free(), primero de cada shor int del arreglo, y luego 
+al puntero al arreglo.
+*/
+short int **cargar_binario(const char *rutaBinario){
+    size_t factorRedimensionar = 2;
+    FILE *archivoBinario; 
+    if ((archivoBinario = fopen(rutaBinario, "rb")) == NULL) {
+        fprintf(stderr, "Archivo binario no encontrado.\n");
+        return NULL;
+    }
+    size_t largoArreglo = 100;
+    size_t memoriaReservar = sizeof(short int *) * largoArreglo;
+    short int **punteroArreglo = (short int **)malloc(memoriaReservar);
+    if (punteroArreglo == NULL) {
+        fclose(archivoBinario);
+        return NULL;
+    }
+
+    size_t i = 0; 
+    punteroArreglo[i] = (short int *)malloc(sizeof(short int));
+    if (punteroArreglo[i] == NULL){
+        free(punteroArreglo);
+        fclose(archivoBinario);
+        return NULL;
+    }
+    while (fread(punteroArreglo[i], sizeof(short int),1,archivoBinario)) { //(void *)
+        *punteroArreglo[i] = ntohs(*punteroArreglo[i]);
+        ++i;
+        if (i >= largoArreglo) {
+            size_t nuevoLargo;
+            nuevoLargo = largoArreglo * sizeof(short int) * factorRedimensionar ;
+            short int **nuevoPunteroArreglo = realloc(punteroArreglo, nuevoLargo);
+            if (nuevoPunteroArreglo == NULL){
+                for (int j = 0; j<i; ++j){
+                    free(punteroArreglo[i]);
+                }
+                free(punteroArreglo);
+                fclose(archivoBinario);
+                return NULL;
+            }
+            punteroArreglo = nuevoPunteroArreglo;
+        }
+        punteroArreglo[i] = (short int *)malloc(sizeof(short int));
+        if (punteroArreglo[i] == NULL){
+            for (int j = 0; j<i; ++j){
+                free(punteroArreglo[i]);
+            }
+            free(punteroArreglo);
+            fclose(archivoBinario);
+            return NULL;
+        }
+    }
+    free(punteroArreglo[i]);
+    punteroArreglo[i] = NULL;
+    fclose(archivoBinario);
+    size_t largoFinal = (i + 1) * sizeof(short int *);
+    short int **nuevoPunteroArreglo = realloc(punteroArreglo, largoFinal);
+    if (nuevoPunteroArreglo == NULL){
+        for (int j = 0; j<i; ++j){
+            free(punteroArreglo[i]);
+        }
+        free(punteroArreglo);
+        return NULL;
+    }
+    punteroArreglo = nuevoPunteroArreglo;
+    return punteroArreglo;
+}
+
 int main(int argc, const char *argv[]){
     if (argc != 4) {
         fprintf(stderr, "Uso:\n./server <puerto> <input> [<template>]\n");
@@ -223,29 +305,152 @@ int main(int argc, const char *argv[]){
     }
     const char *sensorBinario = argv[2];
     const char *template = argv[3];
-    FILE *archivoSensor; 
-    if ((archivoSensor = fopen(sensorBinario, "rb")) == NULL) {
-        fprintf(stderr, "Archivo binario no encontrado.\n");
+    short int **numerosLeidos = cargar_binario(sensorBinario);
+    if (numerosLeidos == NULL) {
+        fprintf(stderr, "Error al cargar el binario\n");
         return 1;
     }
-    short int *numeroLeido = malloc(sizeof(short int)); 
-    while (fread(numeroLeido, sizeof(short int),1,archivoSensor)) {
-        double temperaturaSensada = (ntohs(*numeroLeido)-2000)/100;
-        char temperaturaBuffer[100];
+    size_t i;
+    for (i = 0; numerosLeidos[i] != NULL; ++i) {}
+    size_t largoLeidos = i;
+    for (i = 0; numerosLeidos[i] != NULL; ++i) {
+        double temperaturaSensada = (*numerosLeidos[i] - 2000)/100;
+        char temperaturaBuffer[TEMPERATURA_LARGO_MAXIMO];
         size_t largoBuffer = sizeof(temperaturaBuffer);
         snprintf(temperaturaBuffer, largoBuffer, "%.2f", temperaturaSensada);
         vector_t *templateVector;
         templateVector = cargar_template(template, temperaturaBuffer);
         if (templateVector == NULL){
-            free(numeroLeido);
-            fclose(archivoSensor);
+            for (int j = 0; j<largoLeidos+1; ++j){
+                free(numerosLeidos[i]);
+            }
+            free(numerosLeidos);
             fprintf(stderr, "Error al cargar el template.\n");
             return 1;
         }
         vector_imprimir(templateVector);
         vector_destruir(templateVector);
     }
-    free(numeroLeido);
-    fclose(archivoSensor);
-    return 0;
+    for (int j = 0; j<largoLeidos+1; ++j){
+        free(numerosLeidos[j]);
+    }
+    free(numerosLeidos);
+
+    //Sockets
+    int estado = 0;
+    unsigned short len = 0;
+    bool seguirEjecutando = true;
+    bool esLaAceptacionDelSocketValido = true;
+    
+    struct addrinfo hints;
+    struct addrinfo *ptr;
+
+    int sktPasivo, sktActivo = 0;
+    int val;
+
+    char small_buf[MAX_SMALL_BUF_LEN];
+    char *tmp;
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;       // IPv4 (or AF_INET6 for IPv6)
+    hints.ai_socktype = SOCK_STREAM; // TCP  (or SOCK_DGRAM for UDP)
+    hints.ai_flags = AI_PASSIVE; // AI_PASSIVE for server
+    
+    estado = getaddrinfo(NULL, argv[1], &hints, &ptr);
+
+    if (estado != 0) { 
+        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
+        return 1;
+    }
+
+    sktPasivo = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+
+    if (sktPasivo == -1) {
+        printf("Error: %s\n", strerror(errno));
+        freeaddrinfo(ptr);
+        return 1;
+    }
+
+    // Activamos la opcion de Reusar la Direccion en caso de que esta
+    // no este disponible por un TIME_WAIT
+    val = 1;
+    estado = setsockopt(sktPasivo, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(sktPasivo);
+        freeaddrinfo(ptr);
+        return 1;
+    }
+
+    // Decimos en que direccion local queremos escuchar, en especial el puerto
+    // De otra manera el sistema operativo elegiria un puerto random
+    // y el cliente no sabria como conectarse
+    estado = bind(sktPasivo, ptr->ai_addr, ptr->ai_addrlen);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(sktPasivo);
+        freeaddrinfo(ptr);
+        return 1;
+    }
+
+    freeaddrinfo(ptr);
+
+    // Cuanto clientes podemos mantener en espera antes de poder acceptarlos?
+    estado = listen(sktPasivo, 20);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(sktPasivo);
+        return 1;
+    }
+
+    while (seguirEjecutando) {
+        sktActivo = accept(sktPasivo, NULL, NULL);   // aceptamos un cliente
+        if (sktActivo == -1) {
+            printf("Error: %s\n", strerror(errno));
+            seguirEjecutando = false;
+            esLaAceptacionDelSocketValido = false;
+        } else {
+            char buffer[MENSAJE_LARGO_MAXIMO];
+            size_t largoMaximo = sizeof(buffer);
+            int bytesRecibidos; 
+            bytesRecibidos = recibir_mensaje(sktActivo, buffer, largoMaximo-1); 
+         
+            //len = atoi(small_buf);
+            //printf("Echo %i bytes\n", len);
+            buffer[bytesRecibidos] = "\0";
+            printf("%s\n", buffer);
+
+            templateVector = cargar_template(template, temperaturaBuffer);
+            if (templateVector == NULL){
+                shutdown(sktActivo, SHUT_RDWR);
+                close(sktActivo);
+                free(sktActivo);
+                break;  
+                }
+            
+            fprintf(stderr, "Error al cargar el template.\n");
+            return 1;
+            }
+            size_t largoTemplate = vector_obtener_tamanio(templateVector);
+            for (int i = 0; i < largoTemplate; ++i) {
+                vector_obtener(templateVector, i, &buffer[i]);
+            }
+            vector_destruir(templateVector);
+
+            int bytesEnviados;
+            bytesEnviados = enviar_mensaje(sktActivo, buffer, largoTemplate); 
+
+            shutdown(sktActivo, SHUT_RDWR);
+            close(sktActivo);
+    }
+    
+   
+    shutdown(sktPasivo, SHUT_RDWR);
+    close(sktPasivo);
+
+    if (esLaAceptacionDelSocketValido) {
+       return 1;
+    } else { 
+        return 0;
+    }
 }
