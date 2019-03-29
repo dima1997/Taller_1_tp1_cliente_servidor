@@ -1,16 +1,4 @@
-// Cliente
-
-/*
-El cliente se ejecuta con la siguiente línea de comandos:
-./client ​ <host> <port> ​ [ ​ <filename>​ ]
-Donde ​ <host>​ y ​ <port>​ son la dirección IPv4 o ​ hostname ​ y el puerto o servicio donde el
-servidor estará escuchando la conexión TCP.
-<filename>​ es un argumento opcional que indica el ​ archivo de texto ​ con el requ
-*/
-
-//1ero: Abrir archivo e imprimirlo en pantalla
-//#define _POSIX_C_SOURCE 200112L
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -22,107 +10,114 @@ servidor estará escuchando la conexión TCP.
 #include <unistd.h>
 #include "common.h"
 
-#define MENSAJE_LARGO_MAXIMO 1000
-
+#define PAQUETE_LARGO_MAXIMO 1024 // 1 k
 
 /*
-Pre: recibe un archivo (FILE*)ya abierto de donde leer la peticion.
-Post: devuelve un puntero a un vector dinamico de chars (vector_t*) 
-almacenado de memoria dinamica, que puede ser liberada por medio de
-vector_destruir(<vector>).
-El vector tiene un tamanio igual a la cantidad de caracteres que 
-almacena (ni mas, ni menos).
-Si hubo algun problema al cargar la peticion, devuelve NULL.
+Pre: Recibe un socket ya contectado.
+Post: Recibe un mensaje del servidor y lo imprime por
+salida estandard. Devuevle true si logro recibir todo 
+el mensaje, false en caso contrario.
 */
-vector_t *cargar_peticion(FILE* archivoPeticion){
-    size_t largoPeticion = 200;
-    vector_t *peticion = vector_crear(largoPeticion);
+bool cliente_recibir_mensaje(int skt) {
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    bool estaSocketRemotoCerrado = false;
+    int bytesRecibidos = 0;
 
-    char caracter;
-    char caracterAnterior = '\0';
-    size_t i = 0; 
-    while ((caracter = getc(archivoPeticion)) != -1){ //eof
-        if (caracter == '\n') {
-            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
-                //Una linea vacia marca el final de la peticion
-                //Para cuando archivoPeticion es stdin
-                break;
-            }
-        }
-        if (i >= largoPeticion){
-            size_t nuevoLargo = largoPeticion*2;
-            bool seRedimensiono = vector_redimensionar(peticion, nuevoLargo);
-            if (!seRedimensiono) {
-                vector_destruir(peticion);
-                return NULL;
-            }
-            largoPeticion = nuevoLargo;
-        }
-        vector_guardar(peticion, i, caracter);
-        ++i;
-        caracterAnterior = caracter;
-    }
-    size_t largoFinal = i;
-    bool seRedimensiono = vector_redimensionar(peticion, largoFinal);
-    if (!seRedimensiono) {
-        vector_destruir(peticion);
-        return NULL;
-        }
-    return peticion;
-    }
-/*
-Pre: recibe un archivo de texto ya abierto.
-Post: Devuelve una cadena de caracteres (terminada en \0) que 
-contiene todos los carateres del archivo desde el inicio hasta
-una linea vacia o fin de archivo; o NULL si hubo algun error 
-durante la carga.
-Queda a respondabilidad del usuario liberar la memoria reservada 
-para la cadena, por medio de free
-*/
-char *cargar_archivo(FILE *archivo){
-    size_t factorRedimension = 2;
-    size_t largoTexto = 1000;
-    size_t tamanioInicial = largoTexto * sizeof(char);
-    char *texto = (char *)malloc(tamanioInicial);
-    if (texto == NULL){
-        return NULL;
-    }
+    char parteDelMensaje[PAQUETE_LARGO_MAXIMO];
+    size_t largoMaximo = sizeof(PAQUETE_LARGO_MAXIMO);
 
-    char caracter;
-    char caracterAnterior = '\0';
-    size_t i = 0; 
-    while ((caracter = getc(archivo)) != -1){ //eof
-        if (caracter == '\n') {
-            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
-                //Una linea vacia marca el final de la peticion
-                //Para cuando archivoPeticion es stdin
-                break;
-            }
+    while (hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
+        estado = recv(skt, &parteDelMensaje, largoMaximo - 1, MSG_NOSIGNAL); // - \0
+
+        if (estado < 0) {
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
         }
-        if (i >= largoTexto){
-            size_t nuevoLargo = largoTexto*sizeof(char)*factorRedimension;
-            char *nuevoTexto = realloc(texto, nuevoLargo);
-            if (nuevoTexto == NULL) {
-                free(texto);
-                return NULL;
-            }
-            largoTexto = nuevoLargo;
+        else if (estado == 0) {
+            // Cerro el canal, entonces, por hipotesis del TP, 
+            // el servidor termino de enviarnos el mensaje.
+            estaSocketRemotoCerrado = true;
         }
-        texto[i] = caracter;
-        ++i;
-        caracterAnterior = caracter;
+        else {
+            bytesRecibidos = estado; 
+            parteDelMensaje[bytesRecibidos] = 0;
+            printf("%s", parteDelMensaje);
+            bytesRecibidos = 0; 
+        }
     }
-    size_t largoFinal = i+1;
-    char *textoFinal = realloc(texto, largoFinal);
-    if (textoFinal == NULL) {
-        free(texto);
-        return NULL;
-    }
-    texto = textoFinal;
-    texto[i] = '\0';
-    return texto;
+    return hayErrorDeSocket;
 }
-
+/*
+Pre: Recibe un socket ya conectado, y un archivo de texto 
+ya abierto de donde se leera el mensaje a enviar.
+Post: Envia el mensaje en archivo recibido, a donde sea que 
+este conectado el socket. Devuelve true si logro enviar todo
+el mensaje; false en caso contrario dado algun error del
+socket. 
+*/
+bool cliente_enviar_mensaje(int skt, FILE *archivo) {
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    int bytesEnviados = 0;
+    char parteDelMensaje[PAQUETE_LARGO_MAXIMO];
+    size_t largoMensaje = sizeof(parteDelMensaje);
+    char caracter;
+    char caracterAnterior = '\0';
+    int i = 0; 
+    while ((caracter = getc(archivo)) != -1 && hayErrorDeSocket == false) {
+        if (caracter == '\n') {
+            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
+                //Una linea vacia marca el final de la peticion
+                //Para cuando archivoPeticion es stdin
+                break;
+            }
+        }
+        parteDelMensaje[i] = caracter;
+        if (i >= largoMensaje) {
+            estado = send(skt, &parteDelMensaje, largoMensaje, MSG_NOSIGNAL);
+            if (estado < 0) { 
+                printf("Error: %s\n", strerror(errno));
+                hayErrorDeSocket = true;
+            } else if (estado == 0) { 
+                // Bajo las hipotesis del TP, el que envia 
+                // el mensaje deberia cerrar el canal
+                hayErrorDeSocket = true;
+            } else {
+                bytesEnviados = estado;
+                int bytesSinEnviar = largoMensaje - bytesEnviados;
+                for (int j = 0; j < bytesSinEnviar ; ++j) {
+                    int posicionByteSinEnviar = largoMensaje - bytesSinEnviar + j;
+                    parteDelMensaje[j] = parteDelMensaje[posicionByteSinEnviar];
+                }
+                i = bytesSinEnviar;
+            }
+        }
+        ++i;
+        caracterAnterior = caracter;
+    }
+    if (hayErrorDeSocket) {
+        return false;
+    }
+    while (i > 0 && hayErrorDeSocket == false) {
+        estado = send(skt, &parteDelMensaje, i, MSG_NOSIGNAL);
+        if (estado < 0) { 
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
+        } else if (estado == 0) { 
+            hayErrorDeSocket = true;
+        } else {
+            bytesEnviados = estado;
+            int bytesSinEnviar = i - bytesEnviados;
+            for (int j = 0; j < bytesSinEnviar ; ++j){
+                int posicionByteSinEnviar = i - bytesSinEnviar + j;
+                parteDelMensaje[j] = parteDelMensaje[posicionByteSinEnviar];
+            }
+            i = bytesSinEnviar;
+        }
+    }
+    return !(hayErrorDeSocket);
+}
 
 int main(int argc, const char* argv[]) {
     if (argc < 3 || argc > 4) {
@@ -131,27 +126,6 @@ int main(int argc, const char* argv[]) {
     }
     const char *nombreHost = argv[1];
     const char *nombrePuerto = argv[2];
-    char *peticion;
-    if (argc == 3) {
-
-        peticion = cargar_archivo(stdin);
-            if (peticion == NULL){ 
-            return 1;
-        }
-    } else {
-        FILE *archivoPeticion;
-        const char *nombreArchivoPeticion = argv[3]; 
-        if ((archivoPeticion = fopen(nombreArchivoPeticion, "rt")) == NULL) {
-            fprintf(stderr, "Archivo no encontrado.\n");
-            return 1;
-        }
-
-        peticion = cargar_archivo(archivoPeticion);
-        fclose(archivoPeticion);
-        if (peticion == NULL){ 
-            return 1;
-        }
-    }
     // Sockets
     int estado = 0;
     bool estamosConectados = false;
@@ -184,30 +158,35 @@ int main(int argc, const char* argv[]) {
     freeaddrinfo(direcciones);
     if (estamosConectados == false) {
         return 1; 
-
-    int bytesEnviados;
-    size_t largoPeticion = strlen(peticion);
-    bytesEnviados = enviar_mensaje(skt, peticion, largoPeticion); //buffer
-    if (bytesEnviados < 0){
+    }
+    bool seEnvioPeticion = false;
+    if (argc == 3) {
+        seEnvioPeticion = cliente_enviar_mensaje(skt, stdin);
+    } else {
+        const char *nombreArchivoPeticion = argv[3]; 
+        FILE *archivoPeticion;
+        if ((archivoPeticion = fopen(nombreArchivoPeticion, "rt")) == NULL) {
+            fprintf(stderr, "Archivo no encontrado.\n");
+            return 1;
+        }
+        seEnvioPeticion = cliente_enviar_mensaje(skt, archivoPeticion);
+        fclose(archivoPeticion);
+    }
+    if (seEnvioPeticion == false){
         shutdown(skt, SHUT_RDWR);
         close(skt);
         return 1;
     }
-
     shutdown(skt, SHUT_WR);
-    free(peticion);
 
-    char respuesta[MENSAJE_LARGO_MAXIMO];
-    size_t largoMaximo = sizeof(respuesta);
-    int bytesRecibidos;
-    bytesRecibidos = recibir_mensaje(skt, respuesta, largoMaximo-1);
+    bool seRecibioRespuesta;
+    seRecibioRespuesta = cliente_recibir_mensaje(skt);
     shutdown(skt, SHUT_RDWR);
     close(skt);
     
-    if (bytesRecibidos < 0) {
-        return 1;   
+    if (seRecibioRespuesta == false) {
+        return 1;
     } else {
         return 0;
     }
 }
-

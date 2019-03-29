@@ -1,8 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define _POSIX_C_SOURCE 200809L
-//#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -13,58 +12,6 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-
-/*******************************************************************
- *                DEFINICION DE LOS TIPOS DE DATOS
- ******************************************************************/
-
-typedef struct vector {
-    size_t tam;
-    char* datos;
-} vector_t;
-
-
-/*******************************************************************
- *                    PRIMITIVAS DEL VECTOR
- ******************************************************************/
-
-// Crea un vector de tamaño tam
-// Post: vector es una vector vacío de tamaño tam
-vector_t* vector_crear(size_t tam);
-
-// Destruye el vector
-// Pre: el vector fue creado
-// Post: se eliminaron todos los elementos del vector
-void vector_destruir(vector_t* vector);
-
-// Cambia el tamaño del vector
-// Pre: el vector fue creado
-// Post: el vector cambió de tamaño a nuevo_tam y devuelve true
-// o el vector queda intacto y devuelve false si no se pudo cambiar el tamaño
-// a nuevo_tam
-bool vector_redimensionar(vector_t* vector, size_t nuevo_tam);
-
-// Almacena en valor el dato guardado en la posición pos del vector
-// Pre: el vector fue creado
-// Post: se almacenó en valor el dato en la posición pos. Devuelve false si la
-// posición es inválida (fuera del rango del vector, que va de 0 a tamaño-1)
-bool vector_obtener(vector_t* vector, size_t pos, char* valor);
-
-// Almacena el valor en la posición pos
-// Pre: el vector fue creado
-// Post: se almacenó el valor en la posición pos. Devuelve false si la posición
-// es inválida (fuera del rango del vector, que va de 0 a tamaño-1) y true si
-// se guardó el valor con éxito.
-bool vector_guardar(vector_t* vector, size_t pos, char valor);
-
-// Devuelve el tamaño del vector
-// Pre: el vector fue creado
-size_t vector_obtener_tamanio(vector_t* vector);
-
-// Pre: Recibe un puntero a vector dinamico de chars (vector_t).
-// Post: imprime por salida estandard (stdout) el contenido del 
-// vector.
-void vector_imprimir(vector_t *vector);
 
 /*
 Pre: Recibe un socket ya conectado: skt (int), y un puntero al 
@@ -98,5 +45,16 @@ char** split(const char* str, char sep);
  * Libera un arreglo dinámico de cadenas, y todas las cadenas que contiene.
  */
 void free_strv(char* strv[]);
+
+/*
+Pre: recibe un archivo de texto ya abierto.
+Post: Devuelve una cadena de caracteres (terminada en \0) que 
+contiene todos los carateres del archivo desde el inicio hasta
+una linea vacia o fin de archivo; o NULL si hubo algun error 
+durante la carga.
+Queda a respondabilidad del usuario liberar la memoria reservada 
+para la cadena, por medio de free
+*/
+char *cargar_archivo(FILE *archivo);
 
 #endif // COMMON_H

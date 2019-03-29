@@ -19,22 +19,8 @@ más adelante).
 Si el request fue válido, se intenta leer otro dato del archivo del sensor, y se repite el ciclo. Si el
 request fue inválido, se utiliza la lectura anterior del sensor.
 
-
-Formato de la respuesta HTTP
-El formato de la respuesta (​ response ​ ) posee dos partes separadas por una línea en blanco. La
-primer parte, la cabecera, está compuesta por la línea de estado (​ status ​ ), la sección de
-cabecera, similar a la de un ​ request , ​ y el cuerpo del mensaje.La línea de estado tiene el siguiente formato:
-El protocolo utilizado será "HTTP/1.1"
-Si el petitorio fue válido (ver detalle más adelante en la sección del servidor), el status es "200"
-y la descripción "OK".
-Si el petitorio no tiene un formato válido o es una acción no válida, el status es "400" y la
-descripción es "Bad request".
-Si el petitorio es válido, pero el recurso buscado no es válido, el status es "404" y la descripción
-es "Not found".
-
 */
-#define _POSIX_C_SOURCE 200809L 
-//#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdlib.h>
 #include "common.h"
@@ -42,101 +28,159 @@ es "Not found".
 
 #define TEMPERATURA_LARGO_MAXIMO 100
 #define MENSAJE_LARGO_MAXIMO 1000
+#define PAQUETE_LARGO_MAXIMO 1024 // 1 k
 /*
 uint32_t htonl(uint32_t hostlong);
 uint16_t htons(uint16_t hostshort);
 uint32_t ntohl(uint32_t netlong);
 uint16_t ntohs(uint16_t netshort);
 */
+
+typedef struct linea {
+    char *caracteres;
+    size_t largo;
+    size_t _largoReservado;
+} linea_t ;
 /*
-Pre: recibe la ruta a un archivo de texto tipo template, 
-en la que en algun lugar del mismo se encuentra la cadena:
-{{datos}}, y un dato numerico en cadena de caracteres (char*).
-Post: Devuelve un vector dinamico (vector_t *) reemplazando 
-la cadena {{datos}}, por el dato recibido por parametro. O
-NULL si surgió algun problema durante la carga.
-Restriccion: de haber mas de una {{datos}} por linea, 
-reemplaza solo al primero de ellos.
-Queda a responsabilidad de quien usa esta funcion, de liberar
-el espacio reservado para el vector, por medio de la funcion
-vector_destruir(vector_t* vector)
+Inicializa una Linea
+Pre: recibe una linea ya creada (linea_t *)
+Post: devuelve true si se inicializo la linea con exito, 
+false en caso contrario
 */
-vector_t *cargar_template(const char *ruta_template, char *dato){
-    size_t largoDato = strlen(dato);
-
-    FILE *archivoTemplate; 
-    if ((archivoTemplate = fopen(ruta_template, "rt")) == NULL) {
-        fprintf(stderr, "Archivo template no encontrado.\n");
-        return NULL;
+bool linea_crear(linea_t *linea){
+    linea-> largo = 0;
+    linea->_largoReservado = PAQUETE_LARGO_MAXIMO;
+    linea->caracteres = malloc(sizeof(char)*PAQUETE_LARGO_MAXIMO);
+    if (caracteres == NULL) {
+        return false;
     }
-    char* linea = NULL; 
-    size_t capacidadLinea = 0; 
-    ssize_t largoLinea;
-
-    size_t largoVector = 200;
-    	
-    vector_t *templateVector = vector_crear(largoVector);
-    	
-    if (templateVector == NULL){
-   		free(linea);
-       	fclose(archivoTemplate);
-       	printf("Error al cargar template\n");
-       	return NULL;
-   	}
-    	
-   	size_t posicionVector = 0;
-    size_t factorRedimensionar = 2;
-    const char *sustitutoDato = "{{datos}}";
-    size_t largoSustitutoDato = strlen(sustitutoDato);
-
-    while ((largoLinea = getline(&linea,&capacidadLinea,archivoTemplate)) > 0){ 
-    // que hacemos si el getline falla ?
-        char *datoPosicion = strstr(linea, sustitutoDato);
-        size_t proximoUltimoIndice = posicionVector+largoLinea+largoDato;
-        if (proximoUltimoIndice >= largoVector) {
-            size_t nuevoLargo = proximoUltimoIndice * factorRedimensionar;
-            bool seRedimensiono;
-            seRedimensiono = vector_redimensionar(templateVector, nuevoLargo);
-            if (!seRedimensiono){
-                vector_destruir(templateVector);
-                free(linea);
-                fclose(archivoTemplate);
-                return NULL;
-            }
-            largoVector = nuevoLargo;
-        }
-        if (datoPosicion == NULL){
-            for (int i = 0; i < largoLinea; ++i){
-                vector_guardar(templateVector, posicionVector, linea[i]);
-                ++posicionVector;
-            }
-            continue;
-        }
+    linea->caracteres[0] = '\0';
+    return true; 
+}
+/*
+Pre: recibe una cadena de caracteres terminada en \0.
+Post: agrega tantos caracteres de la cadena hasta encontrar un \n
+Devuelve la cantidad de caracteres que sobraron despues del \n.
+Devuelve -1 en caso de no poder agregar ningun caracter, por falta
+de memoria.
+*/
+int linea_agregar_caracteres(char *cadena) {
+    const size_t factorRedimensionar = 2;
+    size_t largoCadena = strlen(cadena);
+    char *direccionSalto = strstr(cadena, "\n");
+    size_t largoOcupar;
+    size_t posicionSalto;
+    size_t cantidadSobrantes;
+    if (direccionSalto != NULL){
         size_t i;
-        for (i = 0;  &linea[i] != datoPosicion; ++i){
-            vector_guardar(templateVector, posicionVector, linea[i]);
-            ++posicionVector;
-        }
-        size_t j;
-        for (j = 0; j < largoDato; ++j){
-            vector_guardar(templateVector, posicionVector, dato[j]);
-            ++posicionVector;
-        }
-        for (i += largoSustitutoDato; i < largoLinea; ++i){
-            vector_guardar(templateVector, posicionVector, linea[i]);
-            ++posicionVector;
-        }   		
+        for (i = 0; &cadena[i]!=direccionSalto;++i) {}
+        posicionSalto = i;
+        largoOcupar = linea->largo + i;
+        cantidadSobrantes = largoCadena - i; 
+    } else {
+        largoOcupar = linea->largo + largoCadena;
+        cantidadSobrantes = 0;
     }
-    free(linea);
-    fclose(archivoTemplate);
-    size_t largoFinalVector = posicionVector;
-    bool seRedimensiono;
-    seRedimensiono = vector_redimensionar(templateVector, largoFinalVector);
-    if (!seRedimensiono){
-        vector_destruir(templateVector);   
+    if (largoOcupar >= linea->_largoReservado){
+        size_t nuevoLargoReservar = largoOcupar*factorRedimensionar;
+        size_t memoriaReservar = sizeof(char)*nuevoLargoReservar;
+        char *nuevosCaracteres = realloc(linea->caracteres, memoriaReservar); 
+        if (nuevosCaracteres == NULL) {
+            return -1;
+        }
+        linea->caracteres = nuevosCaracteres;
+        linea->_largoReservado = nuevoLargoReservar;
+    } 
+    size_t posicionHastaCopiar = largoCadena - cantidadSobrantes;
+    size_t posicionInicial = linea->largo;
+    size_t i;
+    for (i = 0; i < posicionHastaCopiar; ++i){
+        linea->caracteres[posicionInicial + i] = cadena[i];
+    }
+    linea->largo = posicionInicial + i; 
+    return cantidadSobrantes;
+    
+}
+
+/*
+Pre: recibe una linea ya creada e inicializada.
+Post: destruye la linea.
+*/
+void linea_destruir(linea_t linea) {
+    free(linea->caracteres);
+    return;
+}
+
+/*
+Pre: Recibe un socket ya conectado.
+Post: Recibe y procesa una peticion del cliente. 
+Devuelve la primer linea de la peticion http (char *);
+o NULL si hubo algun error con el socket.
+Queda a responsabilidad del usuario liberar la memoria
+reservada para la linea, por medio de la funcion free.
+*/
+char *servidor_procesar_peticion() {
+    size_t factorRedimensionar = 2;
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    bool estaSocketRemotoCerrado = false;
+    int bytesRecibidos = 0;
+
+    char parteDePeticion[PAQUETE_LARGO_MAXIMO];
+    size_t largoMaximo = sizeof(parteDePeticion);
+    size_t largoLinea = largoMaximo;
+    char *primerLinea = malloc(sizeof(char)*largoLinea);
+    if (primerLinea == NULL) {
         return NULL;
     }
-    return templateVector;
+    // Busco primerLinea
+    size_t numeroLinea = 0;
+    size_t posicionPrimerLinea = 0;
+    while (numeroLinea <= 0 && hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
+        estado = recv(skt, &parteDePeticion, largoMaximo - 1, MSG_NOSIGNAL);
+
+        if (estado < 0) {
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
+        }
+        else if (estado == 0) {
+            //Suponemos que termino de recibir el mensaje 
+            // y que no se cerró por otra razon
+            estaSocketRemotoCerrado = true;
+        }
+        else {
+            bytesRecibidos = estado; 
+            parteDePeticion[bytesRecibidos] = 0;
+            char *direccionSalto = strstr(parteDePeticion, "\n");
+            if (posicionSalto == NULL) {
+                size_t nuevoLargo = largoLinea * factorRedimensionar;
+                size_t memoriaReservar;
+                memoriaReservar = sizeof(char) * nuevoLargo;
+                char *nuevaLinea = realloc(primerLinea, memoriaReservar);
+                if (nuevaLinea == NULL) {
+                    free(primerLinea);
+                    return NULL;
+                }
+                primerLinea = nuevaLinea;
+                largoLinea = nuevoLargo;
+                for (int j = 0; j < bytesRecibidos; ++j){
+                    primerLinea[posicionPrimerLinea + j] = parteDePeticion[j];
+                }
+                posicionPrimerLinea += bytesRecibidos; 
+                bytesRecibidos = 0; 
+            } else  {
+                size_t i;
+                for (i = 0; &parteDePeticion[i] != direccionSalto; ++i) {}
+                size_t posicionSalto = i;
+                largoFinal = posicionPrimerLinea + posicionSalto + 1;
+                char *lineaFinal = realloc();
+                //USAR TAD LINEA CREADO MAS ARRIBA
+            }
+
+
+        }
+    }
+    return hayErrorDeSocket;
 }
 
 /*
@@ -154,7 +198,13 @@ reservada para cada cadena y para el arreglo en si, por
 medio de la funcion free().
 */
 char **partir_texto(char *texto, char *palabra) {
-    char *posicionPalabra = strstr(texto, palabra);
+    char *direccionPalabra = strstr(texto, palabra);
+    if (direccionPalabra == NULL) {
+        return NULL;
+    }
+    size_t i; 
+    for (i = 0; &texto[i] != direccionPalabra; ++i) {}
+    size_t posicionPalabra = i;
     size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
     char *primerParte = malloc(memoriaReservar);
     if (primerParte == NULL) {
@@ -171,12 +221,13 @@ char **partir_texto(char *texto, char *palabra) {
         free(primerParte);
         return NULL;
     }
+    size_t posicionSegundaParte;
     posicionSegundaParte = posicionPalabra + largoPalabra;
-    for (int i = posicionSegundaParte; i<largoTexto; ++i){
+    for (i = posicionSegundaParte; i<largoTexto; ++i){
         segundaParte[i - posicionSegundaParte] = texto[i];
     }
     segundaParte[largoSegundaParte] = '\0';
-    char **ambasPartes = malloc(sizeof(char*)*3) // 2 partes + 1 \0
+    char **ambasPartes = malloc(sizeof(char*)*3); // 2 partes + 1 \0
     if (ambasPartes == NULL){
         free(segundaParte);
         free(primerParte);
@@ -190,37 +241,29 @@ char **partir_texto(char *texto, char *palabra) {
 } 
 
 /*
-// Sensor
-Los datos del sensor de temperatura son simulados por un archivo binario. Este archivo está
-compuesto por números de 16 bits en formato ​ big-endian ​ . Los mismos se interpretan de la
-siguiente forma: Temperatura = (datos - 2000) / 100.
-Ejemplo:
-Dado el archivo cuyo contenido es: ​ 10 00 03 E8​ , (4 bytes),
-extraigo 2 números de 16 bits cada uno: ​ 0x1000​ (4096) y ​ 0x03E8​ (1000),
-que corresponden a las temperaturas "20.96" y "-10.00" respectivamente.
-Nótese que el archivo tiene 4 bytes: la notación ​ 10 00 03 E8​ es solo para
-representar el contenido del mismo (binario) en números hexadecimal.
+Pre: recibe dos cadenas de caracteres terminadas en \0 (char *).
+Post: devuelve un nueva cadena, que es la concatenacion de las dos 
+cadenas recibidas, anteponiendo la primera cadena antes de la 
+segunda. La nueva cadena termina en \0. Si ocurrio algun problema 
+devuelve NULL.
+Queda a responsabilidad del usuario liberar la memoria reservada,
+por medio de la funcion free(). 
 */
-
-/*
-Pre: recibe la ruta de un archivo binario compuesto por numeros de 16 bits en
-formato big-endian.
-Post: imprime los cada numero del archivo intepretado en forma decimal.
-*/
-void imprimir_sensor(const char *rutaSensor){
-    FILE *archivoSensor; 
-    if ((archivoSensor = fopen(rutaSensor, "rb")) == NULL) {
-        fprintf(stderr, "Archivo binario no encontrado.\n");
-        return;
+char *concatenar(char *primerCadena, char *segundaCadena) {
+    size_t largoPrimera = strlen(primerCadena);
+    size_t largoSegunda = strlen(segundaCadena);
+    size_t memoriaReservar = largoPrimera + largoSegunda + 1; // + \0
+    char *cadenaConcatenada = malloc(memoriaReservar);
+    if (cadenaConcatenada == NULL) {
+        return NULL;
     }
-    short int *numeroLeido = malloc(sizeof(short int)); 
-    while (fread(numeroLeido, sizeof(short int),1,archivoSensor)) {
-        double temperaturaSensada = (ntohs(*numeroLeido)-2000)/100;
-        printf("%.2f\n", temperaturaSensada);
+    snprintf(cadenaConcatenada, largoPrimera, "%s", primerCadena);
+    size_t i;
+    for (i = largoPrimera; segundaCadena[i-largoPrimera] != '\0'; ++i) {
+        cadenaConcatenada[i] = segundaCadena[i-largoPrimera];
     }
-    
-    fclose(archivoSensor);
-    return;
+    cadenaConcatenada[i] = '\0';
+    return cadenaConcatenada;
 }
 
 /*
@@ -300,6 +343,26 @@ short int **cargar_binario(const char *rutaBinario){
     punteroArreglo = nuevoPunteroArreglo;
     return punteroArreglo;
 }
+
+/*
+Pre: Recibe un arreglo de punteros reservado en memoria 
+dinamica, terminado en NULL. Donde, ademas, cada puntero 
+del arreglo apunta a un otro bloque de memoria dinamica
+reservada.
+Cada uno de estos bloques individuales de memoria deben
+poder ser liberados con la funcion free().
+Post: libera toda la memoria reservada.
+*/
+void free_arreglo_punteros(void **arreglo) {
+    if (arreglo == NULL) {
+        return;
+    }
+    for (int i = 0; arreglo[i] != NULL; ++i){
+        free(arreglo[i]);
+    }
+    free(arreglo);
+}
+
 /*
 typedef struct recursoVisitado {
     char *recursoVisitado;
@@ -313,15 +376,15 @@ Post: devuelve una cadena de caractares guardados en memoria
 reservada, con la respuesta a la peticion recibida; o NULL si 
 hubo algun error.
 */
-char *responder_peticion(char *peticion, char *temperatura, const char *template) {
+char *responder_peticion(char *peticion, char *templateRespuesta, bool *seUsoTemplate) {
     char *status = "HTTP/1.1 %s %s\n\n\0";
     size_t i;
     for (i = 0; peticion[i] != '\n'; ++i) {}
     char *primerLinea = malloc(sizeof(char)*(i+1));
-    if (primerLinea == NULL){
+    if (primerLinea == NULL) {
         return NULL;
     }
-    strncpy(primerLinea, peticion, i);
+    strncpy(primerLinea, peticion, i); // Y si mejor uso snprintf ?
     primerLinea[i] = '\0';
     char **argumentosMetodo = split(primerLinea, ' ');
     free(primerLinea);
@@ -338,36 +401,36 @@ char *responder_peticion(char *peticion, char *temperatura, const char *template
     size_t largoCabecera = sizeof(cabecera);
     if (!(cantArgumentosCorrecta && metodoCorrecto)) {
         snprintf(cabecera, largoCabecera, status, "400", "Bad request");
+        *seUsoTemplate = false;
     } else if (strcmp(recurso, "/sensor")!=0) {
         snprintf(cabecera, largoCabecera, status, "404", "Not found");
+        *seUsoTemplate = false;
     } else {
         snprintf(cabecera, largoCabecera, status, "200", "OK");
+        *seUsoTemplate = true;
     }
     free_strv(argumentosMetodo);
     largoCabecera = strlen(cabecera);
-    char cuerpo[MENSAJE_LARGO_MAXIMO];
-    vector_t *templateVector;
-    templateVector = cargar_template(template, temperatura);
-    if (templateVector == NULL){
-        fprintf(stderr, "Error al cargar el template.\n");
-        return NULL;
+    size_t largoTemplate = strlen(templateRespuesta);
+    size_t memoriaReservar;
+    if (*seUsoTemplate == true) {
+        memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 3); // + \n + \n + \0
+    } else {
+        memoriaReservar = sizeof(char)*(largoCabecera + 1); // + \0
     }
-    size_t largoTemplate = vector_obtener_tamanio(templateVector);
-    for (int i = 0; i < largoTemplate; ++i) {
-        vector_obtener(templateVector, i, &cuerpo[i]);
-    }
-    vector_destruir(templateVector);
-    cuerpo[largoTemplate] = '\0';
-    size_t memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 1);
     char *respuesta = (char *)malloc(memoriaReservar);
     if (respuesta == NULL) {
         return NULL;
     }
     respuesta[0] = '\0';
     strcat(respuesta, cabecera);
-    strcat(respuesta, cuerpo);
+    if (*seUsoTemplate == true){
+        strcat(respuesta, templateRespuesta);
+        strcat(respuesta, "\n\n");
+    }
     return respuesta;
 }
+
 
 int main(int argc, const char *argv[]) {
     if (argc != 4) {
@@ -376,10 +439,22 @@ int main(int argc, const char *argv[]) {
     }
    	const char *nombrePuerto = argv[1];
     const char *sensorBinario = argv[2];
-    const char *template = argv[3];
-    short int **numerosLeidos = cargar_binario(sensorBinario);
-    if (numerosLeidos == NULL) {
-        fprintf(stderr, "Error al cargar el binario\n");
+    const char *rutaTemplate = argv[3];
+    FILE *archivoTemplate; 
+    if ((archivoTemplate = fopen(rutaTemplate, "rt")) == NULL) {
+        fprintf(stderr, "Archivo template no encontrado.\n");
+        return 1;
+    }
+    char *template = cargar_archivo(archivoTemplate);
+    fclose(archivoTemplate); 
+    if (template == NULL) {
+        fprintf(stderr, "Error al cargar template.\n");
+        return 1;
+    }
+    char **partesTemplate = partir_texto(template,"{{datos}}");
+    free(template);
+    if (partesTemplate == NULL){
+        fprintf(stderr, "Error al procesar template.\n");
         return 1;
     }
     //Sockets
@@ -402,10 +477,7 @@ int main(int argc, const char *argv[]) {
 
     if (estado != 0) { 
         printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
-        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-            free(numerosLeidos[i]);
-        }
-        free(numerosLeidos);
+        free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
 
@@ -414,12 +486,14 @@ int main(int argc, const char *argv[]) {
     if (sktPasivo == -1) {
         printf("Error: %s\n", strerror(errno));
         freeaddrinfo(ptr);
-        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-            free(numerosLeidos[i]);
-        }
-        free(numerosLeidos);
+        free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
+    //---------------------------------------------------------------------------------------
+    // Copiado de:
+    // https://github.com/Taller-de-Programacion/clases/blob/master/sockets/src/echoserver.c
+
+    // Evita que le servidor falle al abrilo y cerrarlo en poco tiemp
 
     // Activamos la opcion de Reusar la Direccion en caso de que esta
     // no este disponible por un TIME_WAIT
@@ -429,43 +503,41 @@ int main(int argc, const char *argv[]) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
         freeaddrinfo(ptr);
-        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-            free(numerosLeidos[i]);
-        }
-        free(numerosLeidos);
+        free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-
-    // Decimos en que direccion local queremos escuchar, en especial el puerto
-    // De otra manera el sistema operativo elegiria un puerto random
-    // y el cliente no sabria como conectarse
+    //---------------------------------------------------------------------------------------
     estado = bind(sktPasivo, ptr->ai_addr, ptr->ai_addrlen);
     if (estado == -1) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
         freeaddrinfo(ptr);
-        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-            free(numerosLeidos[i]);
-        }
-        free(numerosLeidos);
+        free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-
     freeaddrinfo(ptr);
 
-    // Cuanto clientes podemos mantener en espera antes de poder acceptarlos?
-    estado = listen(sktPasivo, 20);
+    estado = listen(sktPasivo, 15); // definir constante !!!
     if (estado == -1) {
         printf("Error: %s\n", strerror(errno));
         close(sktPasivo);
-        for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-            free(numerosLeidos[i]);
-        }
-        free(numerosLeidos);
+        free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-    size_t posicionLeidos = 0;
-    while (seguirEjecutando && numerosLeidos[posicionLeidos] != NULL) {
+
+
+    FILE *archivoBinario; 
+    if ((archivoBinario = fopen(sensorBinario, "rb")) == NULL) {
+        fprintf(stderr, "Archivo binario no encontrado.\n");
+        close(sktPasivo);
+        free_arreglo_punteros((void *)partesTemplate);
+        return 1;
+    }
+    short int numeroLeido; 
+    int cantidadLeidos;
+    cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
+        
+    while (cantidadLeidos > 0 && seguirEjecutando ) { 
         sktActivo = accept(sktPasivo, NULL, NULL);   // aceptamos un cliente
         if (sktActivo == -1) {
             printf("Error: %s\n", strerror(errno));
@@ -474,42 +546,54 @@ int main(int argc, const char *argv[]) {
         } else {
             char peticion[MENSAJE_LARGO_MAXIMO];
             size_t largoMaximo = sizeof(peticion);
+            
             recibir_mensaje(sktActivo, peticion, largoMaximo-1); 
+            
             
             printf("%s", peticion);
 
-            short int numeroLeido = *numerosLeidos[posicionLeidos];
-            double temperaturaSensada = (numeroLeido - 2000)/100;
 
-            char temperaturaBuffer[TEMPERATURA_LARGO_MAXIMO];
-            size_t largoBuffer = sizeof(temperaturaBuffer);
-            snprintf(temperaturaBuffer, largoBuffer, "%.2f", temperaturaSensada);
-            
-            char *respuesta = responder_peticion(peticion, temperaturaBuffer, template); 
+            //-----------------------------------------------------------------------
+            double temperaturaSensada = (numeroLeido - 2000)/100;
+            char temperatura[TEMPERATURA_LARGO_MAXIMO];
+            size_t largoBuffer = sizeof(temperatura);
+            snprintf(temperatura, largoBuffer, "%.2f", temperaturaSensada);
+            size_t largoPrimera = strlen(partesTemplate[0]);
+            size_t largoSegunda = strlen(partesTemplate[1]);
+            size_t memoriaReservar; 
+            memoriaReservar = largoPrimera + largoSegunda + largoBuffer + 1; // + \0
+            char *templateRespuesta = malloc(memoriaReservar);
+            if (templateRespuesta == NULL) {
+                shutdown(sktActivo, SHUT_RDWR);
+                close(sktActivo);
+                break;
+            }
+            templateRespuesta[0] = '\0';
+            strcat(templateRespuesta, partesTemplate[0]);
+            strcat(templateRespuesta, temperatura);
+            strcat(templateRespuesta, partesTemplate[1]);
+            bool seUsoTemplate;
+            char *respuesta = responder_peticion(peticion, templateRespuesta, &seUsoTemplate); 
+            free(templateRespuesta);
             if (respuesta == NULL){
                 shutdown(sktActivo, SHUT_RDWR);
                 close(sktActivo);
-                for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-                    free(numerosLeidos[i]);
-                }
-                free(numerosLeidos);
                 break;
             }
             size_t largoRespuesta = strlen(respuesta);
-
+            //---------------------------------------------------------------------------------
             enviar_mensaje(sktActivo, respuesta, largoRespuesta);
+
             shutdown(sktActivo, SHUT_RDWR);
             close(sktActivo);
             free(respuesta);
-            ++posicionLeidos;
+            if (seUsoTemplate == true){
+                cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
+            }
     	}
     }
-    
-    for (int i = 0; numerosLeidos[i]!=NULL; ++i){
-        free(numerosLeidos[i]);
-    }
-    free(numerosLeidos);
-
+    fclose(archivoBinario);
+    free_arreglo_punteros((void **)partesTemplate);
     shutdown(sktPasivo, SHUT_RDWR);
     close(sktPasivo);
 
@@ -520,11 +604,4 @@ int main(int argc, const char *argv[]) {
     }
 }
 
-/*
-./client <host> <port>​ [ ​ <filename>​ ]
-./client localhost 8080 ​request-firefox.txt
-
-./server​ 8080 <sensor-filename> <template-filename>
-./server 8080 sensor-simple.bin template.html
-*/
 
