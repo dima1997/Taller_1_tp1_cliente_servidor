@@ -1,21 +1,23 @@
-// Servidor
 #define _POSIX_C_SOURCE 200112L
 #include <string.h>
 #include <stdlib.h>
-#include "common.h"
+#include <stdio.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
 #include <arpa/inet.h>
-
 #define TEMPERATURA_LARGO_MAXIMO 100
-#define MENSAJE_LARGO_MAXIMO 1000
 #define CABECERA_lARGO_MAXIMO 27
-#define PAQUETE_LARGO_MAXIMO 1024 // 1 k
-
+#define PAQUETE_LARGO_MAXIMO 1024 
+// 1 k
 typedef struct linea {
     char *caracteres;
     size_t largo;
     size_t _largoReservado;
-} linea_t ;
-
+} linea_t;
 /*
 Inicializa una Linea
 Pre: recibe una linea ya creada (linea_t *)
@@ -48,7 +50,7 @@ int linea_agregar_caracteres(linea_t *linea, char *cadena) {
     size_t cantidadSobrante;
     if (direccionSalto != NULL){
         size_t i;
-        for (i = 0; &cadena[i]!=direccionSalto;++i) {}
+        for (i = 0; &cadena[i]!=direccionSalto; ++i) {}
         size_t posicionSalto = i;
         largoOcupar = linea->largo + posicionSalto;
         cantidadSobrante = largoCadena - posicionSalto; 
@@ -115,137 +117,6 @@ Post: destruye la linea.
 void linea_destruir(linea_t *linea) {
     free(linea->caracteres);
     return;
-}
-
-/*
-Pre: Recibe dos cadenas de caracteres terminadas en \0: 
-un texto (char *) y una palabra (char *) que este en el 
-primero.
-Post: Devuelve un arreglo dinamico de dos cadenas de 
-caracteres que corresponden a la parte del texto que 
-viene antes de la palabra recibida (primera cadena) y a 
-la que viene despues de la misma (segunda cadena). El
-arreglo termina en NULL. Si ocurrio algun error devuelve
-NULL. 
-Queda a responsabilidad del usuario liberar la memoria 
-reservada para cada cadena y para el arreglo en si, por
-medio de la funcion free().
-*/
-char **partir_texto(char *texto, char *palabra) {
-    char *direccionPalabra = strstr(texto, palabra);
-    if (direccionPalabra == NULL) {
-        return NULL;
-    }
-    size_t i; 
-    for (i = 0; &texto[i] != direccionPalabra; ++i) {}
-    size_t posicionPalabra = i;
-    size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
-    char *primerParte = malloc(memoriaReservar);
-    if (primerParte == NULL) {
-        return NULL;
-    } 
-    strncpy(primerParte, texto, posicionPalabra);
-    primerParte[posicionPalabra] = '\0';
-    size_t largoTexto = strlen(texto);
-    size_t largoPalabra = strlen(palabra);
-    size_t largoSegundaParte = largoTexto - largoPalabra - posicionPalabra;
-    memoriaReservar = sizeof(char)*(largoSegundaParte+1);
-    char *segundaParte = malloc(memoriaReservar);
-    if (segundaParte == NULL) {
-        free(primerParte);
-        return NULL;
-    }
-    size_t posicionSegundaParte;
-    posicionSegundaParte = posicionPalabra + largoPalabra;
-    for (i = posicionSegundaParte; i<largoTexto; ++i){
-        segundaParte[i - posicionSegundaParte] = texto[i];
-    }
-    segundaParte[largoSegundaParte] = '\0';
-    char **ambasPartes = malloc(sizeof(char*)*3); // 2 partes + 1 \0
-    if (ambasPartes == NULL){
-        free(segundaParte);
-        free(primerParte);
-        return NULL;
-    }
-    ambasPartes[0] = primerParte;
-    ambasPartes[1] = segundaParte;
-    ambasPartes[2] = NULL;
-    return ambasPartes;
-
-} 
-
-/*
-Pre: Recibe un arreglo de punteros reservado en memoria 
-dinamica, terminado en NULL. Donde, ademas, cada puntero 
-del arreglo apunta a un otro bloque de memoria dinamica
-reservada.
-Cada uno de estos bloques individuales de memoria deben
-poder ser liberados con la funcion free().
-Post: libera toda la memoria reservada.
-*/
-void free_arreglo_punteros(void **arreglo) {
-    if (arreglo == NULL) {
-        return;
-    }
-    for (int i = 0; arreglo[i] != NULL; ++i){
-        free(arreglo[i]);
-    }
-    free(arreglo);
-}
-
-/*
-Pre: recibe la primer linea de la peticion a responder 
-(char *) terminada en '\0'.
-Post: devuelve una cadena de caractares guardados en memoria 
-reservada, con la respuesta a la peticion recibida; o NULL si 
-hubo algun error.
-Queda a responsabilidad del usuario liberar dicha memoria
-reservada.
-*/
-char *responder_peticion(const char *primerLinea, char *cuerpo) { //, bool *seUsoTemplate
-    char *status = "HTTP/1.1 %s %s\n\n\0";
-    bool usarTemplate = false;
-    size_t i;
-    char **argumentosMetodo = split(primerLinea, ' ');
-    if (argumentosMetodo == NULL) {
-        return NULL;
-    }
-    char *metodo = argumentosMetodo[0];
-    char *recurso = argumentosMetodo[1]; // ESTO EXPLOTARA ?
-    for (i=0; argumentosMetodo[i]!=NULL; ++i) {}
-    int cantidadArgumentos = i;
-    bool cantArgumentosCorrecta = (cantidadArgumentos == 3);
-    bool metodoCorrecto = (strcmp(metodo, "GET")==0);
-    char cabecera[CABECERA_lARGO_MAXIMO];
-    size_t largoCabecera = sizeof(cabecera);
-    if (!(cantArgumentosCorrecta && metodoCorrecto)) {
-        snprintf(cabecera, largoCabecera, status, "400", "Bad request");
-    } else if (strcmp(recurso, "/sensor")!=0) {
-        snprintf(cabecera, largoCabecera, status, "404", "Not found");
-    } else {
-        snprintf(cabecera, largoCabecera, status, "200", "OK");
-        usarTemplate = true;
-    }
-    free_strv(argumentosMetodo);
-    largoCabecera = strlen(cabecera);
-    size_t largoTemplate = strlen(cuerpo);
-    size_t memoriaReservar;
-    if (usarTemplate == true) {
-        memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 2); // + \n + \0
-    } else {
-        memoriaReservar = sizeof(char)*(largoCabecera + 1); // + \0
-    }
-    char *respuesta = (char *)malloc(memoriaReservar);
-    if (respuesta == NULL) {
-        return NULL;
-    }
-    respuesta[0] = '\0';
-    strcat(respuesta, cabecera);
-    if (usarTemplate == true){
-        strcat(respuesta, cuerpo);
-        strcat(respuesta, "\n");
-    }
-    return respuesta;
 }
 
 typedef struct recursoVisitado {
@@ -408,8 +279,297 @@ void recursosVector_imprimir(recursosVector_t *vector) {
         recursoVisitado_t * recursoActual = vector->recursos[i];
         char *nombreActual = recursoVisitado_ver_nombre(recursoActual);
         int vecesVisitado = recursoVisitado_ver_visitas(recursoActual);
-        fprintf(stdout, "%s: %d\n", nombreActual, vecesVisitado);
+        fprintf(stdout, "* %s: %d\n", nombreActual, vecesVisitado);
     }
+}
+
+/*
+Pre: recibe un archivo de texto ya abierto.
+Post: Devuelve una cadena de caracteres (terminada en \0) que 
+contiene todos los carateres del archivo desde el inicio hasta
+una linea vacia o fin de archivo; o NULL si hubo algun error 
+durante la carga.
+Queda a respondabilidad del usuario liberar la memoria reservada 
+para la cadena, por medio de free
+*/
+char *cargar_archivo(FILE *archivo){
+    size_t factorRedimension = 2;
+    size_t largoTexto = 1000;
+    size_t tamanioInicial = largoTexto * sizeof(char);
+    char *texto = (char *)malloc(tamanioInicial);
+    if (texto == NULL){
+        return NULL;
+    }
+
+    char caracter;
+    char caracterAnterior = '\0';
+    size_t i = 0; 
+    while ((caracter = getc(archivo)) != -1){ //eof
+        if (caracter == '\n') {
+            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
+                //Una linea vacia marca el final de la peticion
+                //Para cuando archivoPeticion es stdin
+                break;
+            }
+        }
+        if (i >= largoTexto){
+            size_t nuevoLargo = largoTexto*sizeof(char)*factorRedimension;
+            char *nuevoTexto = realloc(texto, nuevoLargo);
+            if (nuevoTexto == NULL) {
+                free(texto);
+                return NULL;
+            }
+            largoTexto = nuevoLargo;
+        }
+        texto[i] = caracter;
+        ++i;
+        caracterAnterior = caracter;
+    }
+    size_t largoFinal = i+1;
+    char *textoFinal = realloc(texto, largoFinal);
+    if (textoFinal == NULL) {
+        free(texto);
+        return NULL;
+    }
+    texto = textoFinal;
+    texto[i] = '\0';
+    return texto;
+}
+
+/*
+Pre: Recibe dos cadenas de caracteres terminadas en \0: 
+un texto (char *) y una palabra (char *) que este en el 
+primero.
+Post: Devuelve un arreglo dinamico de dos cadenas de 
+caracteres que corresponden a la parte del texto que 
+viene antes de la palabra recibida (primera cadena) y a 
+la que viene despues de la misma (segunda cadena). El
+arreglo termina en NULL. Si ocurrio algun error devuelve
+NULL. 
+Queda a responsabilidad del usuario liberar la memoria 
+reservada para cada cadena y para el arreglo en si, por
+medio de la funcion free().
+*/
+char **partir_texto(char *texto, char *palabra) {
+    char *direccionPalabra = strstr(texto, palabra);
+    if (direccionPalabra == NULL) {
+        return NULL;
+    }
+    size_t i; 
+    for (i = 0; &texto[i] != direccionPalabra; ++i) {}
+    size_t posicionPalabra = i;
+    size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
+    char *primerParte = malloc(memoriaReservar);
+    if (primerParte == NULL) {
+        return NULL;
+    } 
+    strncpy(primerParte, texto, posicionPalabra);
+    primerParte[posicionPalabra] = '\0';
+    size_t largoTexto = strlen(texto);
+    size_t largoPalabra = strlen(palabra);
+    size_t largoSegundaParte = largoTexto - largoPalabra - posicionPalabra;
+    memoriaReservar = sizeof(char)*(largoSegundaParte+1);
+    char *segundaParte = malloc(memoriaReservar);
+    if (segundaParte == NULL) {
+        free(primerParte);
+        return NULL;
+    }
+    size_t posicionSegundaParte;
+    posicionSegundaParte = posicionPalabra + largoPalabra;
+    for (i = posicionSegundaParte; i<largoTexto; ++i){
+        segundaParte[i - posicionSegundaParte] = texto[i];
+    }
+    segundaParte[largoSegundaParte] = '\0';
+    char **ambasPartes = malloc(sizeof(char*)*3); // 2 partes + 1 \0
+    if (ambasPartes == NULL){
+        free(segundaParte);
+        free(primerParte);
+        return NULL;
+    }
+    ambasPartes[0] = primerParte;
+    ambasPartes[1] = segundaParte;
+    ambasPartes[2] = NULL;
+    return ambasPartes;
+} 
+
+/*
+Pre: Recibe un arreglo de punteros reservado en memoria 
+dinamica, terminado en NULL. Donde, ademas, cada puntero 
+del arreglo apunta a un otro bloque de memoria dinamica
+reservada.
+Cada uno de estos bloques individuales de memoria deben
+poder ser liberados con la funcion free().
+Post: libera toda la memoria reservada.
+*/
+void free_arreglo_punteros(void **arreglo) {
+    if (arreglo == NULL) {
+        return;
+    }
+    for (int i = 0; arreglo[i] != NULL; ++i){
+        free(arreglo[i]);
+    }
+    free(arreglo);
+}
+
+/*
+Pre: Recibe dos cadena de caracteres (char *): un texto, 
+y un separador para del cual splitear el texto. El separador
+debe pertencer al texto
+Post: Devuelve un arreglo de cadenas, terminada en NULL
+(char **), o NULL si ocurrio algun error.
+Queda a responsabilidad del usuario liberar la memoria
+reservada por medio de un free() para cada cadena, y otra
+para todo el arreglo
+*/
+char **split(const char *texto, char* separador){
+    size_t largoSeparador = strlen(separador);
+    size_t largoBuffer = strlen(texto);
+    char *bufferAuxiliar = malloc(sizeof(char)*(largoBuffer)+1);
+    if (bufferAuxiliar == NULL){
+        return NULL;
+    }
+    snprintf(bufferAuxiliar, largoBuffer, "%s", texto);
+    size_t factorRedimensionar = 2;
+    size_t largoReserva = 10;
+    size_t memoriaReservar = sizeof(char *)*largoReserva; 
+    char **arregloPartes = malloc(memoriaReservar);
+    if (arregloPartes == NULL) {
+        free(bufferAuxiliar);
+        return NULL;
+    }
+    size_t i = 0;
+    char *direccionSeparador = strstr(bufferAuxiliar, separador);
+    while (direccionSeparador!=NULL){
+        if (i >= largoReserva) {
+            char **nuevoArreglo;
+            size_t nuevoLargoReservar = largoReserva * factorRedimensionar;
+            size_t memoriaReservar = sizeof(char *)*nuevoLargoReservar;
+            nuevoArreglo = realloc(arregloPartes, memoriaReservar);
+            if (nuevoArreglo == NULL) {
+                for (int j = 0; j<i; ++j){
+                    free(arregloPartes[j]);
+                }
+                free(arregloPartes);
+                free(bufferAuxiliar);
+                return NULL;
+            }
+            arregloPartes = nuevoArreglo;
+            largoReserva = nuevoLargoReservar;
+        }
+        size_t k;
+        for (k = 0; &bufferAuxiliar[k]!=direccionSeparador; ++k) {}
+        size_t posicionSeparador = k;
+        size_t memoriaReservar = sizeof(char)*(posicionSeparador + 1);
+        char *parte = malloc(memoriaReservar);
+        if (parte == NULL){
+            for (int j = 0; j<i; ++j){
+                free(arregloPartes[j]);
+            }
+            free(arregloPartes);
+            free(bufferAuxiliar);
+        }
+        for (k = 0; k<posicionSeparador; ++k){
+            parte[k] = bufferAuxiliar[k];
+        }
+        parte[k] = 0;
+        arregloPartes[i] = parte;
+        ++i;
+        size_t posicionInicial = k + largoSeparador;
+        for (k = posicionInicial; k<largoBuffer; ++k) {
+            bufferAuxiliar[k-posicionInicial] = bufferAuxiliar[k];
+        }
+        largoBuffer = k-posicionInicial;
+        bufferAuxiliar[largoBuffer] = 0;
+        direccionSeparador = strstr(bufferAuxiliar, separador);
+    }
+    char **arregloFinal;
+    size_t largoReservarFinal = i+2; // + ultima parte + NULL
+    memoriaReservar = sizeof(char *)*largoReservarFinal;
+    arregloFinal = realloc(arregloPartes, memoriaReservar);
+    if (arregloFinal == NULL) {
+        for (int j = 0; j<i; ++j){
+            free(arregloPartes[j]);
+        }
+        free(arregloPartes);
+        free(bufferAuxiliar);
+        return NULL;
+    }
+    arregloPartes = arregloFinal;
+    largoReserva = largoReservarFinal;
+    size_t largoUltimaParte = largoBuffer;// +1 + \0
+    memoriaReservar = sizeof(char)*largoUltimaParte;
+    char *ultimaParte = malloc(memoriaReservar);
+    if (ultimaParte == NULL){
+        for (int j = 0; j<i; ++j){
+            free(arregloPartes[j]);
+        }
+        free(arregloPartes);
+        free(bufferAuxiliar);
+        return NULL;
+    } 
+    for (int k = 0; k<largoBuffer; ++k) {
+        ultimaParte[k] = bufferAuxiliar[k];
+    }
+    arregloPartes[i] = ultimaParte;
+    free(bufferAuxiliar);
+    arregloPartes[i+1] = NULL;
+    return arregloPartes;
+}
+
+/*
+Pre: recibe la primer linea de la peticion a responder 
+(char *) terminada en '\0'.
+Post: devuelve una cadena de caractares guardados en memoria 
+reservada, con la respuesta a la peticion recibida; o NULL si 
+hubo algun error.
+Queda a responsabilidad del usuario liberar dicha memoria
+reservada.
+*/
+char *responder_peticion(const char *primerLinea, char *cuerpo) { 
+    char *status = "HTTP/1.1 %s %s\n\n\0";
+    bool usarTemplate = false;
+    size_t i;
+    char **argumentosMetodo = split(primerLinea, " ");
+    if (argumentosMetodo == NULL) {
+        return NULL;
+    }
+    char *metodo = argumentosMetodo[0];
+    for (i=0; argumentosMetodo[i]!=NULL; ++i) {}
+    int cantidadArgumentos = i;
+    bool cantArgumentosCorrecta = (cantidadArgumentos == 3);
+    bool metodoCorrecto = (strcmp(metodo, "GET")==0);
+    char cabecera[CABECERA_lARGO_MAXIMO];
+    size_t largoCabecera = sizeof(cabecera);
+    if (!(cantArgumentosCorrecta && metodoCorrecto)) {
+        snprintf(cabecera, largoCabecera, status, "400", "Bad request");
+    } else if (strcmp(argumentosMetodo[1], "/sensor")!=0) { //recurso
+        snprintf(cabecera, largoCabecera, status, "404", "Not found");
+    } else {
+        snprintf(cabecera, largoCabecera, status, "200", "OK");
+        usarTemplate = true;
+    }
+    free_arreglo_punteros((void **)argumentosMetodo);
+    largoCabecera = strlen(cabecera);
+    size_t largoTemplate = strlen(cuerpo);
+    size_t memoriaReservar;
+    if (usarTemplate == true) {
+        memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 2); 
+        // + \n + \0
+    } else {
+        memoriaReservar = sizeof(char)*(largoCabecera + 1); 
+        // + \0
+    }
+    char *respuesta = (char *)malloc(memoriaReservar);
+    if (respuesta == NULL) {
+        return NULL;
+    }
+    respuesta[0] = '\0';
+    snprintf(respuesta, largoCabecera + 1, "%s", cabecera);
+    if (usarTemplate == true){
+        strncat(respuesta, cuerpo, largoTemplate+1);
+        //strncat(respuesta, "\n", 2);
+    }
+    return respuesta;
 }
 
 /*
@@ -420,9 +580,7 @@ Post: procesa la linea recibida, actualizando la informacion
 del vector de visitas recibido.
 */
 bool procesar_cuerpo_peticion(char *linea, recursosVector_t *visitantes) {
-    
     char **campos = partir_texto(linea, ": ");
-
     if (campos == NULL) {
         return false;
     }
@@ -498,8 +656,6 @@ bool procesar_cuerpo(char *cuerpo, linea_t *linea, recursosVector_t *vector) {
 
 /*
 Pre: Recibe un socket ya conectado, el template para
-        restoSinSalto[i-1] = 0;
-        largoResto = linea_agregar_caracteres(linea, restoSinSalto);
 la posible respuesta actual, la direccion de un booleano
 que indique se se utiliza el template, y la lista de sitios
 visitados.
@@ -522,17 +678,15 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
     if (seCreoLinea == false) {
         return NULL;
     }
-    char *respuesta;
+    char *respuesta = 0;
     size_t numeroLinea = 0; // primer linea: cabecera
     while (estaSocketRemotoCerrado == false) {
         estado = recv(skt, &paquete, largoMaximo - 1, MSG_NOSIGNAL);
-
         if (estado < 0) {
             printf("Error: %s\n", strerror(errno));
             linea_destruir(&linea);
             return NULL;
-        }
-        else if (estado == 0) {
+        } else if (estado == 0) {
             estaSocketRemotoCerrado = true;
             continue;
         }
@@ -557,6 +711,9 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
                     linea_destruir(&linea);
                     return NULL;
                 }
+                if (!(strlen(respuesta)>CABECERA_lARGO_MAXIMO)) {
+                    break;
+                }
                 numeroLinea += 1;
                 linea_borrar(&linea);
                 int posicionSobrante = bytesRecibidos - cupoSobrante;
@@ -577,6 +734,32 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
     }
     linea_destruir(&linea);
     return respuesta;
+}
+
+/*
+Pre: Recibe un socket ya conectado: skt (int), y un puntero al 
+mensaje que a enviar (char *).
+Post: Devuelve true si logro enviar toda la peticion, false en caso 
+contrario, dado un error en el socket o si el socket remoto fue cerrado.
+*/
+bool enviar_mensaje(int skt, char *mensaje, size_t largoMensaje) {
+    int estado = 0;
+    bool hayErrorDeSocket = false;
+    int bytesEnviados = 0;
+    while (bytesEnviados < largoMensaje && hayErrorDeSocket == false) {
+        size_t largoMaximo = largoMensaje - bytesEnviados;
+        estado = send(skt, &mensaje[bytesEnviados], largoMaximo, MSG_NOSIGNAL);
+        if (estado < 0) { 
+            printf("Error: %s\n", strerror(errno));
+            hayErrorDeSocket = true;
+        } else if (estado == 0) { 
+            hayErrorDeSocket = true;
+        } else {
+            bytesEnviados += estado;
+        }
+    }
+    
+    return hayErrorDeSocket;
 }
 
 int main(int argc, const char *argv[]) {
@@ -636,7 +819,7 @@ int main(int argc, const char *argv[]) {
         free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-    //---------------------------------------------------------------------------------------
+    //------------------------------------------------------
     // Copiado de:
     // https://github.com/Taller-de-Programacion/clases/blob/master/sockets/src/echoserver.c
 
@@ -653,7 +836,7 @@ int main(int argc, const char *argv[]) {
         free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-    //---------------------------------------------------------------------------------------
+    //------------------------------------------------------
     estado = bind(sktPasivo, ptr->ai_addr, ptr->ai_addrlen);
     if (estado == -1) {
         printf("Error: %s\n", strerror(errno));
@@ -687,26 +870,28 @@ int main(int argc, const char *argv[]) {
         return 1;
     }
 
-    short int numeroLeido; 
+    uint16_t numeroLeido; 
     int cantidadLeidos;
     cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
         
-    while (cantidadLeidos > 0 && seguirEjecutando ) { 
-        sktActivo = accept(sktPasivo, NULL, NULL);   // aceptamos un cliente
+    while (cantidadLeidos > 0 && seguirEjecutando) { 
+        sktActivo = accept(sktPasivo, NULL, NULL);
         if (sktActivo == -1) {
             printf("Error: %s\n", strerror(errno));
-            printf("VIENE DE AQUI\n");
             seguirEjecutando = false;
             hayErrorDeAceptacion = false;
         } else {
-            double temperaturaSensada = (numeroLeido - 2000)/100;
+            numeroLeido = ntohs(numeroLeido);
+            double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
             char temperatura[TEMPERATURA_LARGO_MAXIMO];
             size_t largoBuffer = sizeof(temperatura);
             snprintf(temperatura, largoBuffer, "%.2f", temperaturaSensada);
             size_t largoPrimera = strlen(partesTemplate[0]);
             size_t largoSegunda = strlen(partesTemplate[1]);
             size_t memoriaReservar; 
-            memoriaReservar = largoPrimera + largoSegunda + largoBuffer + 1; // + \0
+            size_t largoCuerpo = largoPrimera + largoSegunda + largoBuffer + 1;
+            memoriaReservar = sizeof(char)*largoCuerpo; 
+            // + \0
             char *cuerpo = malloc(memoriaReservar);
             if (cuerpo == NULL) {
                 shutdown(sktActivo, SHUT_RDWR);
@@ -714,11 +899,14 @@ int main(int argc, const char *argv[]) {
                 break;
             }
             cuerpo[0] = '\0';
-            strcat(cuerpo, partesTemplate[0]);
-            strcat(cuerpo, temperatura);
-            strcat(cuerpo, partesTemplate[1]);
+            size_t largoSiguiente = largoPrimera + 1;
+            strncat(cuerpo, partesTemplate[0], largoSiguiente);
+            largoSiguiente += largoBuffer;
+            strncat(cuerpo, temperatura, largoSiguiente);
+            largoSiguiente += largoSegunda;
+            strncat(cuerpo, partesTemplate[1], largoSiguiente);
             char *respuesta;
-            respuesta = procesar_peticion(sktActivo, cuerpo, &visitantes);            
+            respuesta = procesar_peticion(sktActivo, cuerpo, &visitantes);
             free(cuerpo);
             if (respuesta == NULL){
                 shutdown(sktActivo, SHUT_RDWR);
@@ -730,8 +918,12 @@ int main(int argc, const char *argv[]) {
             shutdown(sktActivo, SHUT_RDWR);
             close(sktActivo);
             free(respuesta);
+            //Lo invierto devuelve, pues se volvera a invertir luego
+            //si no entro en el if
+            numeroLeido = ntohs(numeroLeido);
             if (largoRespuesta > CABECERA_lARGO_MAXIMO){
-                cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
+                size_t largoDato = sizeof(short int);
+                cantidadLeidos = fread(&numeroLeido,largoDato,1,archivoBinario);
             }
     	}
     }
@@ -739,7 +931,6 @@ int main(int argc, const char *argv[]) {
     free_arreglo_punteros((void **)partesTemplate);
     shutdown(sktPasivo, SHUT_RDWR);
     close(sktPasivo);
-
     if (hayErrorDeAceptacion) {
         recursosVector_destruir(&visitantes);
        return 1;
@@ -749,5 +940,3 @@ int main(int argc, const char *argv[]) {
         return 0;
     }
 }
-
-

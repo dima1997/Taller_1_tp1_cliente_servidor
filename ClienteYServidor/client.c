@@ -8,8 +8,6 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-#include "common.h"
-
 #define PAQUETE_LARGO_MAXIMO 1024 // 1 k
 
 /*
@@ -23,30 +21,26 @@ bool cliente_recibir_mensaje(int skt) {
     bool hayErrorDeSocket = false;
     bool estaSocketRemotoCerrado = false;
     int bytesRecibidos = 0;
-
     char parteDelMensaje[PAQUETE_LARGO_MAXIMO];
     size_t largoMaximo = sizeof(PAQUETE_LARGO_MAXIMO);
-
     while (hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
-        estado = recv(skt, &parteDelMensaje, largoMaximo - 1, MSG_NOSIGNAL); // - \0
-
+        estado = recv(skt, &parteDelMensaje, largoMaximo - 1, MSG_NOSIGNAL); 
+        // - \0
         if (estado < 0) {
             printf("Error: %s\n", strerror(errno));
             hayErrorDeSocket = true;
-        }
-        else if (estado == 0) {
+        } else if (estado == 0) {
             // Cerro el canal, entonces, por hipotesis del TP, 
             // el servidor termino de enviarnos el mensaje.
             estaSocketRemotoCerrado = true;
-        }
-        else {
+        } else {
             bytesRecibidos = estado; 
             parteDelMensaje[bytesRecibidos] = 0;
             printf("%s", parteDelMensaje);
             bytesRecibidos = 0; 
         }
     }
-    return hayErrorDeSocket;
+    return !(hayErrorDeSocket);
 }
 /*
 Pre: Recibe un socket ya conectado, y un archivo de texto 
@@ -87,7 +81,8 @@ bool cliente_enviar_mensaje(int skt, FILE *archivo) {
                 bytesEnviados = estado;
                 int bytesSinEnviar = largoMensaje - bytesEnviados;
                 for (int j = 0; j < bytesSinEnviar ; ++j) {
-                    int posicionByteSinEnviar = largoMensaje - bytesSinEnviar + j;
+                    int posicionByteSinEnviar; 
+                    posicionByteSinEnviar = largoMensaje - bytesSinEnviar + j;
                     parteDelMensaje[j] = parteDelMensaje[posicionByteSinEnviar];
                 }
                 i = bytesSinEnviar;
@@ -119,6 +114,47 @@ bool cliente_enviar_mensaje(int skt, FILE *archivo) {
     return !(hayErrorDeSocket);
 }
 
+/*
+Pre: recibe un socket (int *), y los nombres del
+host y el puerto al que se desea conectar.
+Post: Devuelve true si logro pasar todo el proceso 
+de conexion del socket con exito, false en caso 
+contrario.
+*/
+bool conectar_socket(int *skt, const char* host, const char* puerto) {
+    int estado = 0;
+    bool estamosConectados = false;
+    struct addrinfo hints;
+    struct addrinfo *direcciones, *sig; //siguiente
+    *skt = 0;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM; //TCP
+    hints.ai_flags = 0;
+    estado = getaddrinfo(host, puerto, &hints, &direcciones);
+    if (estado != 0) {
+        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
+        return false;
+    }
+    sig = direcciones;
+    while (sig != NULL) {
+        *skt = socket(sig->ai_family, sig->ai_socktype, sig->ai_protocol);
+        if (*skt == -1) {
+            printf("Error: %s\n",strerror(errno));
+        } else {
+            estado = connect(*skt, sig->ai_addr, sig->ai_addrlen);
+            if (estado == -1) {
+                printf("Error: %s\n", strerror(errno));
+                close(*skt);
+            }
+            estamosConectados = (estado != -1);
+        }
+        sig = sig->ai_next;
+    }
+    freeaddrinfo(direcciones);
+    return estamosConectados;
+}
+
 int main(int argc, const char* argv[]) {
     if (argc < 3 || argc > 4) {
         fprintf(stderr,"Uso:\n./client <direccion> <puerto> [<input>]\n");
@@ -126,38 +162,11 @@ int main(int argc, const char* argv[]) {
     }
     const char *nombreHost = argv[1];
     const char *nombrePuerto = argv[2];
-    // Sockets
-    int estado = 0;
-    bool estamosConectados = false;
-    struct addrinfo hints;
-    struct addrinfo *direcciones, *ptr;
     int skt = 0;
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;     //IPv4
-    hints.ai_socktype = SOCK_STREAM;  //TCP
-    hints.ai_flags = 0;
-    estado = getaddrinfo(nombreHost, nombrePuerto, &hints, &direcciones);
-    if (estado != 0) { 
-        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
-        return 1;
-    }
-    for (ptr = direcciones; ptr != NULL && estamosConectados == false; ptr = ptr->ai_next) {
-        skt = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-        if (skt == -1) {
-            printf("Error: %s\n", strerror(errno));
-        } else {
-        estado = connect(skt, ptr->ai_addr, ptr->ai_addrlen);
-        if (estado == -1) {
-            printf("Error: %s\n", strerror(errno));
-            close(skt);
-            }
-        estamosConectados = (estado != -1); 
-        }
-    }
-    freeaddrinfo(direcciones);
+    bool estamosConectados;
+    estamosConectados = conectar_socket(&skt, nombreHost, nombrePuerto);
     if (estamosConectados == false) {
-        return 1; 
+        return 1;
     }
     bool seEnvioPeticion = false;
     if (argc == 3) {
