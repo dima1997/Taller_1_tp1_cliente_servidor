@@ -8,23 +8,24 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "client.h"
 #define PAQUETE_LARGO_MAXIMO 1024 // 1 k
 
 /*
-Pre: Recibe un socket ya contectado.
-Post: Recibe un mensaje del servidor y lo imprime por
-salida estandard. Devuevle true si logro recibir todo 
+Pre: Recibe un socket (int *) ya contectado.
+Post: Recibe una respuesta del servidor y la imprime por
+salida estandard. Devuelve true si logro recibir todo 
 el mensaje, false en caso contrario.
 */
-bool cliente_recibir_mensaje(int skt) {
+bool recibir_respuesta(int *skt) {
     int estado = 0;
     bool hayErrorDeSocket = false;
     bool estaSocketRemotoCerrado = false;
     int bytesRecibidos = 0;
-    char parteDelMensaje[PAQUETE_LARGO_MAXIMO];
+    char parteRespuesta[PAQUETE_LARGO_MAXIMO];
     size_t largoMaximo = sizeof(PAQUETE_LARGO_MAXIMO);
     while (hayErrorDeSocket == false && estaSocketRemotoCerrado == false) {
-        estado = recv(skt, &parteDelMensaje, largoMaximo - 1, MSG_NOSIGNAL); 
+        estado = recv(*skt, &parteRespuesta, largoMaximo - 1, MSG_NOSIGNAL); 
         // - \0
         if (estado < 0) {
             printf("Error: %s\n", strerror(errno));
@@ -35,27 +36,59 @@ bool cliente_recibir_mensaje(int skt) {
             estaSocketRemotoCerrado = true;
         } else {
             bytesRecibidos = estado; 
-            parteDelMensaje[bytesRecibidos] = 0;
-            printf("%s", parteDelMensaje);
+            parteRespuesta[bytesRecibidos] = 0;
+            printf("%s", parteRespuesta);
             bytesRecibidos = 0; 
         }
     }
     return !(hayErrorDeSocket);
 }
+
 /*
-Pre: Recibe un socket ya conectado, y un archivo de texto 
-ya abierto de donde se leera el mensaje a enviar.
-Post: Envia el mensaje en archivo recibido, a donde sea que 
+Pre: Recibe un socket (int *) ya conectado, la parte del
+mensaje (char *) que se intenta enviar, y el largo de 
+dicha parte.
+Post: Intenta enviar la parte del mensaje recibida. Devuelve 
+la cantidad de bytes que no se lograron enviar. Si esta 
+cantidad es -1 o menor, significa que hubo un error.
+Ademas modifica la parte recibida, dejando en ella solo los 
+caracteres correspondientes a los bytes sin enviar. 
+*/
+int enviar_parte(int *skt, char* parte, int largo) {
+    int estado = 0;
+    estado = send(*skt, parte, largo, MSG_NOSIGNAL);
+    int bytesSinEnviar = 0;
+    if (estado < 0) { 
+        printf("Error: %s\n", strerror(errno));
+        bytesSinEnviar = -1;
+    } else if (estado == 0) { 
+        // Bajo las hipotesis del TP, el que envia 
+        // el mensaje deberia cerrar el canal
+        bytesSinEnviar = -1;
+    } else {
+        int bytesEnviados = estado;
+        bytesSinEnviar = largo - bytesEnviados;
+        for (int j = 0; j < bytesSinEnviar ; ++j) {
+            int posicionByteSinEnviar; 
+            posicionByteSinEnviar = largo - bytesSinEnviar + j;
+            parte[j] = parte[posicionByteSinEnviar];
+        }
+    }
+    return bytesSinEnviar;
+}
+
+/*
+Pre: Recibe un socket (int *) ya conectado, y un archivo (FILE *)
+de texto ya abierto de donde se leera la peticion a enviar.
+Post: Envia la peticion del archivo recibido, a donde sea que 
 este conectado el socket. Devuelve true si logro enviar todo
 el mensaje; false en caso contrario dado algun error del
 socket. 
 */
-bool cliente_enviar_mensaje(int skt, FILE *archivo) {
-    int estado = 0;
+bool enviar_peticion(int *skt, FILE *archivo) {
     bool hayErrorDeSocket = false;
-    int bytesEnviados = 0;
-    char parteDelMensaje[PAQUETE_LARGO_MAXIMO];
-    size_t largoMensaje = sizeof(parteDelMensaje);
+    char partePeticion[PAQUETE_LARGO_MAXIMO];
+    size_t largoParte = sizeof(partePeticion);
     char caracter;
     char caracterAnterior = '\0';
     int i = 0; 
@@ -67,24 +100,12 @@ bool cliente_enviar_mensaje(int skt, FILE *archivo) {
                 break;
             }
         }
-        parteDelMensaje[i] = caracter;
-        if (i >= largoMensaje) {
-            estado = send(skt, &parteDelMensaje, largoMensaje, MSG_NOSIGNAL);
-            if (estado < 0) { 
-                printf("Error: %s\n", strerror(errno));
-                hayErrorDeSocket = true;
-            } else if (estado == 0) { 
-                // Bajo las hipotesis del TP, el que envia 
-                // el mensaje deberia cerrar el canal
+        partePeticion[i] = caracter;
+        if (i >= largoParte) {
+            int bytesSinEnviar = enviar_parte(skt, partePeticion, largoParte);
+            if (bytesSinEnviar < 0){
                 hayErrorDeSocket = true;
             } else {
-                bytesEnviados = estado;
-                int bytesSinEnviar = largoMensaje - bytesEnviados;
-                for (int j = 0; j < bytesSinEnviar ; ++j) {
-                    int posicionByteSinEnviar; 
-                    posicionByteSinEnviar = largoMensaje - bytesSinEnviar + j;
-                    parteDelMensaje[j] = parteDelMensaje[posicionByteSinEnviar];
-                }
                 i = bytesSinEnviar;
             }
         }
@@ -95,19 +116,10 @@ bool cliente_enviar_mensaje(int skt, FILE *archivo) {
         return false;
     }
     while (i > 0 && hayErrorDeSocket == false) {
-        estado = send(skt, &parteDelMensaje, i, MSG_NOSIGNAL);
-        if (estado < 0) { 
-            printf("Error: %s\n", strerror(errno));
-            hayErrorDeSocket = true;
-        } else if (estado == 0) { 
-            hayErrorDeSocket = true;
+        int bytesSinEnviar = enviar_parte(skt, partePeticion, i);
+        if (bytesSinEnviar < 0){
+                hayErrorDeSocket = true;
         } else {
-            bytesEnviados = estado;
-            int bytesSinEnviar = i - bytesEnviados;
-            for (int j = 0; j < bytesSinEnviar ; ++j){
-                int posicionByteSinEnviar = i - bytesSinEnviar + j;
-                parteDelMensaje[j] = parteDelMensaje[posicionByteSinEnviar];
-            }
             i = bytesSinEnviar;
         }
     }
@@ -115,11 +127,10 @@ bool cliente_enviar_mensaje(int skt, FILE *archivo) {
 }
 
 /*
-Pre: recibe un socket (int *), y los nombres del
-host y el puerto al que se desea conectar.
-Post: Devuelve true si logro pasar todo el proceso 
-de conexion del socket con exito, false en caso 
-contrario.
+Pre: Recibe un socket (int *), y los nombres (char *) 
+del host y puerto al que se desea conectar.
+Post: Devuelve true si logro se logro conectarse con exito, 
+false en caso contrario.
 */
 bool conectar_socket(int *skt, const char* host, const char* puerto) {
     int estado = 0;
@@ -162,15 +173,17 @@ int main(int argc, const char* argv[]) {
     }
     const char *nombreHost = argv[1];
     const char *nombrePuerto = argv[2];
+    // Conectamos socket
     int skt = 0;
     bool estamosConectados;
     estamosConectados = conectar_socket(&skt, nombreHost, nombrePuerto);
     if (estamosConectados == false) {
         return 1;
     }
+    // Enviamos peticion
     bool seEnvioPeticion = false;
     if (argc == 3) {
-        seEnvioPeticion = cliente_enviar_mensaje(skt, stdin);
+        seEnvioPeticion = enviar_peticion(&skt, stdin);
     } else {
         const char *nombreArchivoPeticion = argv[3]; 
         FILE *archivoPeticion;
@@ -178,7 +191,7 @@ int main(int argc, const char* argv[]) {
             fprintf(stderr, "Archivo no encontrado.\n");
             return 1;
         }
-        seEnvioPeticion = cliente_enviar_mensaje(skt, archivoPeticion);
+        seEnvioPeticion = enviar_peticion(&skt, archivoPeticion);
         fclose(archivoPeticion);
     }
     if (seEnvioPeticion == false){
@@ -188,8 +201,9 @@ int main(int argc, const char* argv[]) {
     }
     shutdown(skt, SHUT_WR);
 
+    // Recibimos respuesta
     bool seRecibioRespuesta;
-    seRecibioRespuesta = cliente_recibir_mensaje(skt);
+    seRecibioRespuesta = recibir_respuesta(&skt);
     shutdown(skt, SHUT_RDWR);
     close(skt);
     

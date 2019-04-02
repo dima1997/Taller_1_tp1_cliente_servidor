@@ -9,20 +9,16 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include "server.h"
 #define TEMPERATURA_LARGO_MAXIMO 100
 #define CABECERA_lARGO_MAXIMO 27
 #define PAQUETE_LARGO_MAXIMO 1024 // 1 k
 #define CLIENTES_ESCUCHAR 15
 
-typedef struct linea {
-    char *caracteres;
-    size_t largo;
-    size_t _largoReservado;
-} linea_t;
 /*
-Inicializa una Linea
-Pre: recibe una linea ya creada (linea_t *)
-Post: devuelve true si se inicializo la linea con exito, 
+Inicializa una linea_t
+Pre: Recibe una linea ya declarada (linea_t *)
+Post: Devuelve true si se inicializo la linea con exito, 
 false en caso contrario
 */
 bool linea_crear(linea_t *linea){
@@ -36,12 +32,14 @@ bool linea_crear(linea_t *linea){
     return true; 
 }
 /*
+Agrega caracteres a la linea
 Pre: Recibe una cadena de caracteres (char *) terminada en \0.
 Post: Agrega tantos caracteres de la cadena hasta encontrar un \n,
 o hasta llegar al final de la misma.
-Devuelve la cantidad de caracteres que sobraron desde el \n.
-Devuelve -1 en caso de no poder agregar ningun caracter, por falta
-de memoria.
+Devuelve la cantidad de caracteres que sobraron desde el \n 
+(inclusive).
+Devuelve -1 en caso de no poder agregar ningun caracter, por causa 
+de algun error.
 */
 int linea_agregar_caracteres(linea_t *linea, char *cadena) {
     const size_t factorRedimensionar = 2;
@@ -82,20 +80,23 @@ int linea_agregar_caracteres(linea_t *linea, char *cadena) {
 }
 
 /*
-Pre: Recibe una linea (linea_t *) ya creada e inicializada.
+Borra los caracteres agregados de la linea.
+Pre: Recibe una linea (linea_t *) ya  inicializada.
 Post: Borra la linea. Tras ejecutar esta linea, los proximos
-caracteres a agregar, es escribiran desde el principio de la 
+caracteres a agregar, se escribiran desde el principio de la 
 linea.
 */
 void linea_borrar(linea_t *linea) {
     linea->caracteres[0] = 0;
     linea->largo = 0;
 }
+
 /*
-Pre: Recibe una linea (linea_t *) ya creada e inicializada.
-Post: Devuelve la un arreglo de caracteres constante
-(const char *) con todos los caracteres agregados hasta
-el momento; o NULL si hubo algun error. 
+Devuelve un arreglo de los caracteres que forman la linea.
+Pre: Recibe una linea (linea_t *) ya inicializada.
+Post: Devuelve  un arreglo de caracteres (char *) con todos 
+los caracteres agregados hasta el momento; o NULL si hubo 
+algun error. 
 Queda a responsabilidad del usuario liberar la memoria 
 reservada para el arreglo, por medio de la funcion free().
 */
@@ -111,23 +112,20 @@ char *linea_ver_caracteres(linea_t *linea) {
 }
 
 /*
-Pre: recibe una linea ya creada e inicializada.
-Post: destruye la linea.
+Destruye la linea.
+Pre: Recibe una linea (linea_t *) ya inicializada.
+Post: Destruye la linea.
 */
 void linea_destruir(linea_t *linea) {
     free(linea->caracteres);
     return;
 }
 
-typedef struct recursoVisitado {
-    char *nombreRecurso;
-    size_t vecesVisitado;
-} recursoVisitado_t;
-
 /*
-Pre: Recibe un recurso visitado (recursoVisitado *) ya creado, y su 
-nombre (char *), terminado en \0.
-Post: Inicializa el recurso. Devuelve true si logro inicializarlo
+Inicializa un recursoVisitado_t
+Pre: Recibe un recurso visitado (recursoVisitado *) ya 
+declarado, y su nombre (char *), terminado en \0.
+Post: Devuelve true si logro inicializar el recurso
 con exito, false en caso contrario.
 */
 bool recursoVisitado_crear(recursoVisitado_t *recurso, char *nombre) {
@@ -143,8 +141,9 @@ bool recursoVisitado_crear(recursoVisitado_t *recurso, char *nombre) {
 }
 
 /*
+Devuelve el nombre del recurso.
 Pre: Recibe un recurso visitado (recursoVisitado *) ya 
-creado e inicializa.
+inicializado.
 Post: Devuelve el nombre del recurso (char *). 
 */
 char *recursoVisitado_ver_nombre(recursoVisitado_t *recurso) {
@@ -152,41 +151,40 @@ char *recursoVisitado_ver_nombre(recursoVisitado_t *recurso) {
 } 
 
 /*
+Devuelve la cantidad de visitas.
 Pre: Recibe un recurso visitado (recursoVisitado *) ya 
-creado e inicializado.
+inicializado.
 Post: Devuelve la cantidad de veces (int) que el recurso 
 fue visitado.
 */
-int recursoVisitado_ver_visitas(recursoVisitado_t *recurso){
+int recursoVisitado_ver_visitas(recursoVisitado_t *recurso) {
     return recurso->vecesVisitado;
 }
 
 /*
+Visita el recurso.
 Pre: Recibe un recurso visitado (recursoVisitado *) ya 
-creado  e inicializado.
-Post: Lo visita.
+inicializado.
+Post: Visita el recurso, aumentando la cantidad de visitas.
 */
 void recursoVisitado_visitar(recursoVisitado_t *recurso) {
     recurso->vecesVisitado += 1;
 }
 
 /*
-Pre: recibe un recurso visitado (recursoVisitado_t *) ya creado
-e inicializado y lo destruye.
+Destruye el recurso.
+Pre: Recibe un recurso visitado (recursoVisitado_t *) ya 
+inicializado y lo destruye.
+Post: Destruye el recurso.
 */
 void recursoVisitado_destruir(recursoVisitado_t *recurso) {
     free(recurso->nombreRecurso);
 }
 
-typedef struct recursosVector {
-    recursoVisitado_t **recursos;
-    size_t _cantidadReservada; 
-    size_t cantidad;
-} recursosVector_t;
-
 /*
+Inicializa un recursosVector_t.
 Pre: Recibe un vector de recursos visitados (recursosVector_t *) 
-ya creado.
+ya declarado.
 Post: Devuelve true si logro inicializarlo con exito, false en
 caso contrario.
 */
@@ -203,10 +201,13 @@ bool recursosVector_crear(recursosVector_t *vector) {
 }
 
 /*
+Visita un recurso. 
 Pre: Recibe un vector de recursos visitados (recursosVector_t *), y
 el nombre de un recurso a visitar.
-Post: Visita el recurso de nombre recibido. Devuelve true si lo logro 
-visitar con exito, o false en caso contrario.
+Post: Devuelve true si lo logro visitar con exito el recurso de 
+nombre recibido, o false en caso contrario.
+Nota: el recurso recibido se agrega al vector de forma automatica
+si no esta presente. 
 */
 bool recursosVector_visitar(recursosVector_t *vector, char *nombreRecurso) {
     size_t factorRedimensionar = 2;
@@ -249,19 +250,6 @@ bool recursosVector_visitar(recursosVector_t *vector, char *nombreRecurso) {
 /*
 Pre: Recibe un vector de recursos visitados (recursosVector_t *)
 ya creado e inicializado.
-Post: Destruye el vector recibido.
-*/
-void recursosVector_destruir(recursosVector_t *vector) {
-    for (int i = 0; i<vector->cantidad; ++i) {
-        recursoVisitado_destruir(vector->recursos[i]);
-        free(vector->recursos[i]);
-    }
-    free(vector->recursos);
-}
-
-/*
-Pre: Recibe un vector de recursos visitados (recursosVector_t *)
-ya creado e inicializado.
 Post: Imprime por salida estandar la estadistica de los recursos
 visitados, con el siguiente formato:
 # Estadisticas de visitantes:
@@ -284,69 +272,29 @@ void recursosVector_imprimir(recursosVector_t *vector) {
 }
 
 /*
-Pre: recibe un archivo de texto ya abierto.
-Post: Devuelve una cadena de caracteres (terminada en \0) que 
-contiene todos los carateres del archivo desde el inicio hasta
-una linea vacia o fin de archivo; o NULL si hubo algun error 
-durante la carga.
-Queda a respondabilidad del usuario liberar la memoria reservada 
-para la cadena, por medio de free
+Destruye el recursosVector_t.
+Pre: Recibe un vector de recursos visitados (recursosVector_t *)
+ya creado e inicializado.
+Post: Destruye el vector recibido.
 */
-char *cargar_archivo(FILE *archivo){
-    size_t factorRedimension = 2;
-    size_t largoTexto = 1000;
-    size_t tamanioInicial = largoTexto * sizeof(char);
-    char *texto = (char *)malloc(tamanioInicial);
-    if (texto == NULL){
-        return NULL;
+void recursosVector_destruir(recursosVector_t *vector) {
+    for (int i = 0; i<vector->cantidad; ++i) {
+        recursoVisitado_destruir(vector->recursos[i]);
+        free(vector->recursos[i]);
     }
-    char caracter;
-    char caracterAnterior = '\0';
-    size_t i = 0; 
-    while ((caracter = getc(archivo)) != -1){ //eof
-        if (caracter == '\n') {
-            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
-                //Una linea vacia marca el final de la peticion
-                //Para cuando archivo es stdin
-                break;
-            }
-        }
-        if (i >= largoTexto){
-            size_t nuevoLargo = largoTexto*sizeof(char)*factorRedimension;
-            char *nuevoTexto = realloc(texto, nuevoLargo);
-            if (nuevoTexto == NULL) {
-                free(texto);
-                return NULL;
-            }
-            largoTexto = nuevoLargo;
-        }
-        texto[i] = caracter;
-        ++i;
-        caracterAnterior = caracter;
-    }
-    size_t largoFinal = i+1;
-    char *textoFinal = realloc(texto, largoFinal);
-    if (textoFinal == NULL) {
-        free(texto);
-        return NULL;
-    }
-    texto = textoFinal;
-    texto[i] = '\0';
-    return texto;
+    free(vector->recursos);
 }
-
 
 /*
 Pre: Recibe dos cadena de caracteres (char *): un texto, 
 y un separador para del cual splitear el texto. El separador
-debe pertencer al texto
+debe pertencer al texto.
 Post: Devuelve un arreglo de cadenas, terminada en NULL
 (char **), o NULL si ocurrio algun error.
 Queda a responsabilidad del usuario liberar la memoria
-reservada por medio de un free() para cada cadena, y otra
-para todo el arreglo
+reservada por de la funcion free_split().
 */
-char **split(const char *texto, char* separador){
+char **split(const char *texto, char* separador) {
     size_t largoSeparador = strlen(separador);
     size_t largoBuffer = strlen(texto) + 1; //+\0
     char *bufferAuxiliar = malloc(sizeof(char)*(largoBuffer)); 
@@ -450,7 +398,7 @@ Cada uno de estos bloques individuales de memoria deben
 poder ser liberados con la funcion free().
 Post: libera toda la memoria reservada.
 */
-void free_arreglo_punteros(void **arreglo) {
+void free_split(char **arreglo) {
     if (arreglo == NULL) {
         return;
     }
@@ -461,13 +409,13 @@ void free_arreglo_punteros(void **arreglo) {
 }
 
 /*
-Pre: recibe la primer linea de la peticion a responder 
+Pre: Recibe la primer linea de la peticion a responder 
 (char *) terminada en '\0'.
-Post: devuelve una cadena de caractares guardados en memoria 
-reservada, con la respuesta a la peticion recibida; o NULL si 
+Post: Devuelve una cadena de caractares con la respuesta 
+a la peticion cuya primer linea recibidmos; o NULL si 
 hubo algun error.
 Queda a responsabilidad del usuario liberar dicha memoria
-reservada.
+reservada, por medio de la funcion free().
 */
 char *responder_peticion(const char *primerLinea, char *cuerpo) { 
     char *status = "HTTP/1.1 %s %s\n\n\0";
@@ -492,13 +440,13 @@ char *responder_peticion(const char *primerLinea, char *cuerpo) {
         snprintf(cabecera, largoCabecera, status, "200", "OK");
         usarTemplate = true;
     }
-    free_arreglo_punteros((void **)argumentosMetodo);
+    free_split(argumentosMetodo); 
     largoCabecera = strlen(cabecera);
     size_t largoTemplate = strlen(cuerpo);
     size_t memoriaReservar;
     if (usarTemplate == true) {
-        memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 2); 
-        // + \n + \0
+        memoriaReservar = sizeof(char)*(largoTemplate + largoCabecera + 1);
+        // + \0
     } else {
         memoriaReservar = sizeof(char)*(largoCabecera + 1); 
         // + \0
@@ -518,9 +466,10 @@ char *responder_peticion(const char *primerLinea, char *cuerpo) {
 /*
 Pre: Recibe una cadena de caracteres (char *) con la siguiente 
 linea del cuerpo de la peticion a procesar, y un vector con los
-visitantes de peticiones anteriores.
-Post: procesa la linea recibida, actualizando la informacion
-del vector de visitas recibido.
+visitantes de peticiones anteriores (recursosVector_t *).
+Post: Devuelve true si logro procesa la linea recibida con exito, 
+actualizando la informacion del vector de visitas recibido; o
+false en caso contrario.
 */
 bool procesar_lineas_cuerpo(char *linea, recursosVector_t *visitantes) {
     char **campos = split(linea, ": ");
@@ -533,7 +482,7 @@ bool procesar_lineas_cuerpo(char *linea, recursosVector_t *visitantes) {
     if (cantidadCampos != 2) {
         // Esto no ha de pasar, pero tomamos como supuesto
         // que simplemente se ignora la linea.
-        free_arreglo_punteros((void **)campos);
+        free_split(campos); 
         return true; 
     }
     char *nombreCampo = campos[0];
@@ -541,19 +490,23 @@ bool procesar_lineas_cuerpo(char *linea, recursosVector_t *visitantes) {
         char *nombreRecurso = campos[1];
         bool seVisito;
         seVisito = recursosVector_visitar(visitantes, nombreRecurso); 
-        free_arreglo_punteros((void **)campos);
+        free_split(campos); 
         return seVisito;
     }
-    free_arreglo_punteros((void **)campos);
+    free_split(campos); 
     return true;
 }
 
 /*
-Pre: Recibe el resto de caracteres de la peticion que no 
-agrega linea_agregar_caracteres en linea (linea_t *) quien
-tambien lo recibe, y al vector de recursos visitados por
-peticiones anteriores.
-Post: procesa el resto de los caracteres recibidos.
+Pre: Recibe una cadena de caracteres (char *) correspondiente a
+una parte del cuerpo de la peticion cargada. Tambien recibe
+una linea ya inicializada con caracteres del cuerpo que preceden 
+al recibido y que sabemos que aun no se encontro un \n entre ellos.
+Y, por ultimo, recibe un vector de recursos visitados 
+(recursosVisitados_t *) con las visitas de otras peticiones 
+anteriores.
+Post: Devuelve true si logra procesar la parte del cuerpo recibida,
+false en caso contrario.
 */
 bool procesar_cuerpo(char *cuerpo, linea_t *linea, recursosVector_t *vector) {
     char resto[PAQUETE_LARGO_MAXIMO];
@@ -598,19 +551,18 @@ bool procesar_cuerpo(char *cuerpo, linea_t *linea, recursosVector_t *vector) {
 }
 
 /*
-Pre: Recibe un socket ya conectado, el template para
-la posible respuesta actual, la direccion de un booleano
-que indique se se utiliza el template, y la lista de sitios
-visitados.
-Post: Recibe y procesa una peticion del cliente. 
-Devuelve la respuesta a la peticion http (char *), modificando
-el valor de haber utilizado o no el template recibido;
-o NULL si hubo algun error con el socket.
-Actualiza los sitios visitados.
+Pre: Recibe un socket (int *) ya conectado, el template (char *) ya
+armado, es decir, el cuerpo de la respuesta a la peticion actual, si 
+es que este es valida. Tambien recibe un vector de recursos visitados
+con las visitas a peticiones anteriores. 
+Post: Recibe y procesa una peticion del cliente. Devuelve la respuesta 
+a la misma (char *), modificando,o  NULL si hubo algun error con el 
+socket.
+Actualiza los recursos visitados.
 Queda a responsabilidad del usuario liberar la memoria
-reservada para la linea, por medio de la funcion free.
+reservada para la linea, por medio de la funcion free().
 */
-char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
+char *procesar_peticion(int *skt, char* template, recursosVector_t *visitantes){
     int estado = 0;
     bool estaSocketRemotoCerrado = false;
     int bytesRecibidos = 0;
@@ -621,14 +573,15 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
     if (seCreoLinea == false) {
         return NULL;
     }
-    char *respuesta = 0;
+    bool hayError = false;
+    char *respuesta = NULL; 
     size_t numeroLinea = 0; // primer linea: cabecera
     while (estaSocketRemotoCerrado == false) {
-        estado = recv(skt, &paquete, largoMaximo - 1, MSG_NOSIGNAL);
+        estado = recv(*skt, &paquete, largoMaximo - 1, MSG_NOSIGNAL);
         if (estado < 0) {
             printf("Error: %s\n", strerror(errno));
-            linea_destruir(&linea);
-            return NULL;
+            hayError = true;
+            break;
         } else if (estado == 0) {
             estaSocketRemotoCerrado = true;
             continue;
@@ -639,20 +592,20 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
             int cupoSobrante;
             cupoSobrante = linea_agregar_caracteres(&linea, paquete);
             if (cupoSobrante < 0) {
-                linea_destruir(&linea);
-                return NULL;
+            	hayError = true;
+            	break;
             }
             if (cupoSobrante > 0) {
                 char *primerLinea = linea_ver_caracteres(&linea);
                 if (primerLinea == NULL) {
-                    linea_destruir(&linea);
-                    return NULL;
+                	hayError = true;
+                	break;
                 }
                 respuesta = responder_peticion(primerLinea, template);
                 free(primerLinea);
                 if (respuesta == NULL) {
-                    linea_destruir(&linea);
-                    return NULL;
+                	hayError = true;
+                	break;
                 }
                 if (!(strlen(respuesta)>CABECERA_lARGO_MAXIMO)) {
                     break;
@@ -669,29 +622,32 @@ char *procesar_peticion(int skt, char* template, recursosVector_t *visitantes) {
         }   
         bool seProceso;
         seProceso = procesar_cuerpo(paquete, &linea, visitantes);
-        if (seProceso == false){
-            free(respuesta);
-            linea_destruir(&linea);
-            return NULL;
+        if (seProceso == false) {
+        	hayError = true;
+        	break;
         }
     }
     linea_destruir(&linea);
+    if (hayError == true && respuesta != NULL) {
+    	free(respuesta);
+    	respuesta = NULL;
+    }
     return respuesta;
 }
 
 /*
-Pre: Recibe un socket ya conectado: skt (int), y un puntero al 
-mensaje que a enviar (char *).
-Post: Devuelve true si logro enviar toda la peticion, false en caso 
-contrario, dado un error en el socket o si el socket remoto fue cerrado.
+Pre: Recibe un socket ya conectado: skt (int *), y la 
+respuesta que a enviar (char *).
+Post: Devuelve true si logro enviar toda la respuesta, 
+false en caso contrario, dado un error en el socket.
 */
-bool enviar_respuesta(int skt, char *mensaje, size_t largoMensaje) {
+bool enviar_respuesta(int *skt, char *mensaje, size_t largoMensaje) {
     int estado = 0;
     bool hayErrorDeSocket = false;
     int bytesEnviados = 0;
     while (bytesEnviados < largoMensaje && hayErrorDeSocket == false) {
         size_t largoMaximo = largoMensaje - bytesEnviados;
-        estado = send(skt, &mensaje[bytesEnviados], largoMaximo, MSG_NOSIGNAL);
+        estado = send(*skt, &mensaje[bytesEnviados], largoMaximo, MSG_NOSIGNAL);
         if (estado < 0) { 
             printf("Error: %s\n", strerror(errno));
             hayErrorDeSocket = true;
@@ -701,13 +657,13 @@ bool enviar_respuesta(int skt, char *mensaje, size_t largoMensaje) {
             bytesEnviados += estado;
         }
     }
-    return hayErrorDeSocket;
+    return !(hayErrorDeSocket);
 }
 /*
 Pre:  Recibe un socket (int *), y el nombre del puerto 
 (char *) al cual conectarse.
 Post: Devuelve true si logro conectar el socket al puerto
-recibido y setealo para funcionar de socket pasivo; false 
+recibido y setearlo para funcionar de socket pasivo; false 
 en caso contrario.
 */
 bool conectar_socket_pasivo(int *skt, const char *puerto) {
@@ -764,7 +720,59 @@ bool conectar_socket_pasivo(int *skt, const char *puerto) {
 }
 
 /*
-Pre: Recibe el nombre del archivo template a cargar,
+Pre: Recibe un archivo de texto ya abierto.
+Post: Devuelve una cadena de caracteres (terminada en \0) que 
+contiene todos los carateres del archivo desde el inicio hasta
+una linea vacia o fin de archivo; o NULL si hubo algun error 
+durante la carga.
+Queda a respondabilidad del usuario liberar la memoria reservada 
+para la cadena, por medio de free().
+*/
+char *cargar_archivo(FILE *archivo) {
+    size_t factorRedimension = 2;
+    size_t largoTexto = 1000;
+    size_t tamanioInicial = largoTexto * sizeof(char);
+    char *texto = (char *)malloc(tamanioInicial);
+    if (texto == NULL){
+        return NULL;
+    }
+    char caracter;
+    char caracterAnterior = '\0';
+    size_t i = 0; 
+    while ((caracter = getc(archivo)) != -1){ //eof
+        if (caracter == '\n') {
+            if (caracterAnterior == '\n' || caracterAnterior == '\0'){
+                //Una linea vacia marca el final de la peticion
+                //Para cuando archivo es stdin
+                break;
+            }
+        }
+        if (i >= largoTexto){
+            size_t nuevoLargo = largoTexto*sizeof(char)*factorRedimension;
+            char *nuevoTexto = realloc(texto, nuevoLargo);
+            if (nuevoTexto == NULL) {
+                free(texto);
+                return NULL;
+            }
+            largoTexto = nuevoLargo;
+        }
+        texto[i] = caracter;
+        ++i;
+        caracterAnterior = caracter;
+    }
+    size_t largoFinal = i+1;
+    char *textoFinal = realloc(texto, largoFinal);
+    if (textoFinal == NULL) {
+        free(texto);
+        return NULL;
+    }
+    texto = textoFinal;
+    texto[i] = '\0';
+    return texto;
+}
+
+/*
+Pre: Recibe la ruta del archivo template a cargar,
 que en algun momento del mismo tiene la cadena de 
 caracteres: "{{datos}}".
 Post: Devuelve un arreglo de cadenas de caracteres,
@@ -773,7 +781,7 @@ despues de la cadena: "{{datos}}"; o NULL si ocurrio
 algun problema.
 Queda a responsabilidad del usuario liberar la memoria 
 dinamica reservada para el arreglo, por medio de la 
-funcion: void free_arreglo_punteros(void **).
+funcion: void free_split(void **).
 */
 char **cargar_template(const char *ruta) {
 	FILE *archivoTemplate; 
@@ -795,6 +803,7 @@ char **cargar_template(const char *ruta) {
     }
     return partesTemplate;
 }
+
 /*
 Pre: Recibe las dos partes del template (char **), y 
 la temperatura (double) a meter entre dichas partes.
@@ -836,42 +845,45 @@ int main(int argc, const char *argv[]) {
    	const char *nombrePuerto = argv[1];
     const char *sensorBinario = argv[2];
     const char *rutaTemplate = argv[3];
+    //Conectamos socket pasivo.
     int sktPasivo, sktActivo = 0;
 	bool seConecto;
 	seConecto = conectar_socket_pasivo(&sktPasivo, nombrePuerto);
 	if (seConecto == false) {
 		return 1;
 	}
+    //Procesamos template.
     char **partesTemplate = cargar_template(rutaTemplate);
     if (partesTemplate == NULL) {
     	close(sktPasivo);
     	return 1;
     }
+    //Abrimos binario.
     FILE *archivoBinario; 
     if ((archivoBinario = fopen(sensorBinario, "rb")) == NULL) {
         fprintf(stderr, "Archivo binario no encontrado.\n");
         close(sktPasivo);
-        free_arreglo_punteros((void *)partesTemplate);
+        free_split(partesTemplate); 
         return 1;
     }
+    //Inicializamos vector de recursos visitados.
     recursosVector_t visitantes;
     bool seInicializo = recursosVector_crear(&visitantes);
     if (seInicializo == false) {
         close(sktPasivo);
-        free_arreglo_punteros((void *)partesTemplate);
+        free_split(partesTemplate); 
         return 1;
     }
-    bool seguirEjecutando = true;
-    bool hayErrorDeAceptacion = false;
+    //Comezamos a procesar clientes
     uint16_t numeroLeido; 
+    bool hayError = false;
     int cantidadLeidos;
     cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
-    while (cantidadLeidos > 0 && seguirEjecutando) { 
+    while (cantidadLeidos > 0 && hayError == false) {  
         sktActivo = accept(sktPasivo, NULL, NULL);
         if (sktActivo == -1) {
             printf("Error: %s\n", strerror(errno));
-            seguirEjecutando = false;
-            hayErrorDeAceptacion = false;
+            hayError = true;
         } else {
             numeroLeido = ntohs(numeroLeido);
             double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
@@ -882,7 +894,7 @@ int main(int argc, const char *argv[]) {
                 break;
             }
             char *respuesta;
-            respuesta = procesar_peticion(sktActivo, cuerpo, &visitantes);
+            respuesta = procesar_peticion(&sktActivo, cuerpo, &visitantes); 
             free(cuerpo);
             if (respuesta == NULL){
                 shutdown(sktActivo, SHUT_RDWR);
@@ -890,24 +902,28 @@ int main(int argc, const char *argv[]) {
                 break;
             }
             size_t largoRespuesta = strlen(respuesta);
-            enviar_respuesta(sktActivo, respuesta, largoRespuesta);
+            bool seEnvio;
+            seEnvio =  enviar_respuesta(&sktActivo, respuesta, largoRespuesta);
             shutdown(sktActivo, SHUT_RDWR);
             close(sktActivo);
             free(respuesta);
+            if (seEnvio == false) {
+                break;
+            }
             //Lo invierto de vuelta, pues se volvera a invertir luego
             //si no entro en el if
             numeroLeido = ntohs(numeroLeido);
-            if (largoRespuesta > CABECERA_lARGO_MAXIMO){
+            if (largoRespuesta > CABECERA_lARGO_MAXIMO) {
                 size_t largoDato = sizeof(short int);
                 cantidadLeidos = fread(&numeroLeido,largoDato,1,archivoBinario);
             }
     	}
     }
     fclose(archivoBinario);
-    free_arreglo_punteros((void **)partesTemplate);
+    free_split(partesTemplate); 
     shutdown(sktPasivo, SHUT_RDWR);
     close(sktPasivo);
-    if (hayErrorDeAceptacion) {
+    if (hayError == true) {
         recursosVector_destruir(&visitantes);
        return 1;
     } else { 
