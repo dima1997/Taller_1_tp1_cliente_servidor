@@ -686,14 +686,7 @@ bool conectar_socket_pasivo(int *skt, const char *puerto) {
         freeaddrinfo(direccion);
         return false;
     }
-    //------------------------------------------------------
-    // Adaptado de:
-    // https://github.com/Taller-de-Programacion/clases/blob/master/sockets/src/echoserver.c
-
     // Evita que le servidor falle al abrirlo y cerrarlo en poco tiempo
-
-    // Activamos la opcion de Reusar la Direccion en caso de que esta
-    // no este disponible por un TIME_WAIT
     int val = 1;
     estado = setsockopt(*skt, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
     if (estado == -1) {
@@ -702,7 +695,6 @@ bool conectar_socket_pasivo(int *skt, const char *puerto) {
         freeaddrinfo(direccion);
         return false;
     }
-    //------------------------------------------------------
     estado = bind(*skt, dir->ai_addr, dir->ai_addrlen);
     freeaddrinfo(direccion);
     if (estado == -1) {
@@ -879,23 +871,20 @@ int main(int argc, const char *argv[]) {
     bool hayError = false;
     int cantidadLeidos;
     cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
+    numeroLeido = ntohs(numeroLeido);
+    double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
+    char *cuerpo = contruir_cuerpo(partesTemplate, temperaturaSensada);
+    if (cuerpo == NULL) {
+        hayError = true;
+    }
     while (cantidadLeidos > 0 && hayError == false) {  
         sktActivo = accept(sktPasivo, NULL, NULL);
         if (sktActivo == -1) {
             printf("Error: %s\n", strerror(errno));
             hayError = true;
         } else {
-            numeroLeido = ntohs(numeroLeido);
-            double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
-            char *cuerpo = contruir_cuerpo(partesTemplate, temperaturaSensada);
-            if (cuerpo == NULL){
-            	shutdown(sktActivo, SHUT_RDWR);
-                close(sktActivo);
-                break;
-            }
             char *respuesta;
             respuesta = procesar_peticion(&sktActivo, cuerpo, &visitantes); 
-            free(cuerpo);
             if (respuesta == NULL){
                 shutdown(sktActivo, SHUT_RDWR);
                 close(sktActivo);
@@ -910,15 +899,20 @@ int main(int argc, const char *argv[]) {
             if (seEnvio == false) {
                 break;
             }
-            //Lo invierto de vuelta, pues se volvera a invertir luego
-            //si no entro en el if
-            numeroLeido = ntohs(numeroLeido);
             if (largoRespuesta > CABECERA_lARGO_MAXIMO) {
+                free(cuerpo);
                 size_t largoDato = sizeof(short int);
                 cantidadLeidos = fread(&numeroLeido,largoDato,1,archivoBinario);
+                numeroLeido = ntohs(numeroLeido);
+                double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
+                cuerpo = contruir_cuerpo(partesTemplate, temperaturaSensada);
+                if (cuerpo == NULL) {
+                    hayError = true;
+                }
             }
     	}
     }
+    free(cuerpo);
     fclose(archivoBinario);
     free_split(partesTemplate); 
     shutdown(sktPasivo, SHUT_RDWR);
