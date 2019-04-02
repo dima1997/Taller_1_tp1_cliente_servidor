@@ -470,3 +470,61 @@ char *concatenar(char *primerCadena, char *segundaCadena) {
 }
 
 */
+
+/*
+Pre: Recibe dos cadenas de caracteres terminadas en \0: 
+un texto (char *) y una palabra (char *) que este en el 
+primero.
+Post: Devuelve un arreglo dinamico de dos cadenas de 
+caracteres que corresponden a la parte del texto que 
+viene antes de la palabra recibida (primera cadena) y a 
+la que viene despues de la misma (segunda cadena). El
+arreglo termina en NULL. Si ocurrio algun error devuelve
+NULL. 
+Queda a responsabilidad del usuario liberar la memoria 
+reservada para cada cadena y para el arreglo en si, por
+medio de la funcion free().
+*/
+/*
+char **partir_texto(char *texto, char *palabra) {
+    char *direccionPalabra = strstr(texto, palabra);
+    if (direccionPalabra == NULL) {
+        return NULL;
+    }
+    size_t i; 
+    for (i = 0; &texto[i] != direccionPalabra; ++i) {}
+    size_t posicionPalabra = i;
+    size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
+    char *primerParte = malloc(memoriaReservar);
+    if (primerParte == NULL) {
+        return NULL;
+    } 
+    strncpy(primerParte, texto, posicionPalabra);
+    primerParte[posicionPalabra] = '\0';
+    size_t largoTexto = strlen(texto);
+    size_t largoPalabra = strlen(palabra);
+    size_t largoSegundaParte = largoTexto - largoPalabra - posicionPalabra;
+    memoriaReservar = sizeof(char)*(largoSegundaParte+1);
+    char *segundaParte = malloc(memoriaReservar);
+    if (segundaParte == NULL) {
+        free(primerParte);
+        return NULL;
+    }
+    size_t posicionSegundaParte;
+    posicionSegundaParte = posicionPalabra + largoPalabra;
+    for (i = posicionSegundaParte; i<largoTexto; ++i){
+        segundaParte[i - posicionSegundaParte] = texto[i];
+    }
+    segundaParte[largoSegundaParte] = '\0';
+    char **ambasPartes = malloc(sizeof(char*)*3); // 2 partes + 1 \0
+    if (ambasPartes == NULL){
+        free(segundaParte);
+        free(primerParte);
+        return NULL;
+    }
+    ambasPartes[0] = primerParte;
+    ambasPartes[1] = segundaParte;
+    ambasPartes[2] = NULL;
+    return ambasPartes;
+} 
+*/

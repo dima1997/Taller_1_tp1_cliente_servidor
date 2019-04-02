@@ -11,8 +11,9 @@
 #include <arpa/inet.h>
 #define TEMPERATURA_LARGO_MAXIMO 100
 #define CABECERA_lARGO_MAXIMO 27
-#define PAQUETE_LARGO_MAXIMO 1024 
-// 1 k
+#define PAQUETE_LARGO_MAXIMO 1024 // 1 k
+#define CLIENTES_ESCUCHAR 15
+
 typedef struct linea {
     char *caracteres;
     size_t largo;
@@ -54,7 +55,6 @@ int linea_agregar_caracteres(linea_t *linea, char *cadena) {
         size_t posicionSalto = i;
         largoOcupar = linea->largo + posicionSalto;
         cantidadSobrante = largoCadena - posicionSalto; 
-        // hola\nPedro => cant_cupoSobrante = 10 - 4 = 6 :) 
     } else {
         largoOcupar = linea->largo + largoCadena;
         cantidadSobrante = 0;
@@ -300,7 +300,6 @@ char *cargar_archivo(FILE *archivo){
     if (texto == NULL){
         return NULL;
     }
-
     char caracter;
     char caracterAnterior = '\0';
     size_t i = 0; 
@@ -308,7 +307,7 @@ char *cargar_archivo(FILE *archivo){
         if (caracter == '\n') {
             if (caracterAnterior == '\n' || caracterAnterior == '\0'){
                 //Una linea vacia marca el final de la peticion
-                //Para cuando archivoPeticion es stdin
+                //Para cuando archivo es stdin
                 break;
             }
         }
@@ -336,80 +335,6 @@ char *cargar_archivo(FILE *archivo){
     return texto;
 }
 
-/*
-Pre: Recibe dos cadenas de caracteres terminadas en \0: 
-un texto (char *) y una palabra (char *) que este en el 
-primero.
-Post: Devuelve un arreglo dinamico de dos cadenas de 
-caracteres que corresponden a la parte del texto que 
-viene antes de la palabra recibida (primera cadena) y a 
-la que viene despues de la misma (segunda cadena). El
-arreglo termina en NULL. Si ocurrio algun error devuelve
-NULL. 
-Queda a responsabilidad del usuario liberar la memoria 
-reservada para cada cadena y para el arreglo en si, por
-medio de la funcion free().
-*/
-char **partir_texto(char *texto, char *palabra) {
-    char *direccionPalabra = strstr(texto, palabra);
-    if (direccionPalabra == NULL) {
-        return NULL;
-    }
-    size_t i; 
-    for (i = 0; &texto[i] != direccionPalabra; ++i) {}
-    size_t posicionPalabra = i;
-    size_t memoriaReservar = sizeof(char)*(posicionPalabra+1);
-    char *primerParte = malloc(memoriaReservar);
-    if (primerParte == NULL) {
-        return NULL;
-    } 
-    strncpy(primerParte, texto, posicionPalabra);
-    primerParte[posicionPalabra] = '\0';
-    size_t largoTexto = strlen(texto);
-    size_t largoPalabra = strlen(palabra);
-    size_t largoSegundaParte = largoTexto - largoPalabra - posicionPalabra;
-    memoriaReservar = sizeof(char)*(largoSegundaParte+1);
-    char *segundaParte = malloc(memoriaReservar);
-    if (segundaParte == NULL) {
-        free(primerParte);
-        return NULL;
-    }
-    size_t posicionSegundaParte;
-    posicionSegundaParte = posicionPalabra + largoPalabra;
-    for (i = posicionSegundaParte; i<largoTexto; ++i){
-        segundaParte[i - posicionSegundaParte] = texto[i];
-    }
-    segundaParte[largoSegundaParte] = '\0';
-    char **ambasPartes = malloc(sizeof(char*)*3); // 2 partes + 1 \0
-    if (ambasPartes == NULL){
-        free(segundaParte);
-        free(primerParte);
-        return NULL;
-    }
-    ambasPartes[0] = primerParte;
-    ambasPartes[1] = segundaParte;
-    ambasPartes[2] = NULL;
-    return ambasPartes;
-} 
-
-/*
-Pre: Recibe un arreglo de punteros reservado en memoria 
-dinamica, terminado en NULL. Donde, ademas, cada puntero 
-del arreglo apunta a un otro bloque de memoria dinamica
-reservada.
-Cada uno de estos bloques individuales de memoria deben
-poder ser liberados con la funcion free().
-Post: libera toda la memoria reservada.
-*/
-void free_arreglo_punteros(void **arreglo) {
-    if (arreglo == NULL) {
-        return;
-    }
-    for (int i = 0; arreglo[i] != NULL; ++i){
-        free(arreglo[i]);
-    }
-    free(arreglo);
-}
 
 /*
 Pre: Recibe dos cadena de caracteres (char *): un texto, 
@@ -423,8 +348,8 @@ para todo el arreglo
 */
 char **split(const char *texto, char* separador){
     size_t largoSeparador = strlen(separador);
-    size_t largoBuffer = strlen(texto);
-    char *bufferAuxiliar = malloc(sizeof(char)*(largoBuffer)+1);
+    size_t largoBuffer = strlen(texto) + 1; //+\0
+    char *bufferAuxiliar = malloc(sizeof(char)*(largoBuffer)); 
     if (bufferAuxiliar == NULL){
         return NULL;
     }
@@ -517,6 +442,25 @@ char **split(const char *texto, char* separador){
 }
 
 /*
+Pre: Recibe un arreglo de punteros reservado en memoria 
+dinamica, terminado en NULL. Donde, ademas, cada puntero 
+del arreglo apunta a un otro bloque de memoria dinamica
+reservada.
+Cada uno de estos bloques individuales de memoria deben
+poder ser liberados con la funcion free().
+Post: libera toda la memoria reservada.
+*/
+void free_arreglo_punteros(void **arreglo) {
+    if (arreglo == NULL) {
+        return;
+    }
+    for (int i = 0; arreglo[i] != NULL; ++i){
+        free(arreglo[i]);
+    }
+    free(arreglo);
+}
+
+/*
 Pre: recibe la primer linea de la peticion a responder 
 (char *) terminada en '\0'.
 Post: devuelve una cadena de caractares guardados en memoria 
@@ -567,7 +511,6 @@ char *responder_peticion(const char *primerLinea, char *cuerpo) {
     snprintf(respuesta, largoCabecera + 1, "%s", cabecera);
     if (usarTemplate == true){
         strncat(respuesta, cuerpo, largoTemplate+1);
-        //strncat(respuesta, "\n", 2);
     }
     return respuesta;
 }
@@ -579,8 +522,8 @@ visitantes de peticiones anteriores.
 Post: procesa la linea recibida, actualizando la informacion
 del vector de visitas recibido.
 */
-bool procesar_cuerpo_peticion(char *linea, recursosVector_t *visitantes) {
-    char **campos = partir_texto(linea, ": ");
+bool procesar_lineas_cuerpo(char *linea, recursosVector_t *visitantes) {
+    char **campos = split(linea, ": ");
     if (campos == NULL) {
         return false;
     }
@@ -630,7 +573,7 @@ bool procesar_cuerpo(char *cuerpo, linea_t *linea, recursosVector_t *vector) {
             return false;
         }
         bool seProceso;
-        seProceso = procesar_cuerpo_peticion(siguienteLinea, vector); 
+        seProceso = procesar_lineas_cuerpo(siguienteLinea, vector); 
         free(siguienteLinea);
         if (seProceso == false) {
             return false;
@@ -742,7 +685,7 @@ mensaje que a enviar (char *).
 Post: Devuelve true si logro enviar toda la peticion, false en caso 
 contrario, dado un error en el socket o si el socket remoto fue cerrado.
 */
-bool enviar_mensaje(int skt, char *mensaje, size_t largoMensaje) {
+bool enviar_respuesta(int skt, char *mensaje, size_t largoMensaje) {
     int estado = 0;
     bool hayErrorDeSocket = false;
     int bytesEnviados = 0;
@@ -758,8 +701,131 @@ bool enviar_mensaje(int skt, char *mensaje, size_t largoMensaje) {
             bytesEnviados += estado;
         }
     }
-    
     return hayErrorDeSocket;
+}
+/*
+Pre:  Recibe un socket (int *), y el nombre del puerto 
+(char *) al cual conectarse.
+Post: Devuelve true si logro conectar el socket al puerto
+recibido y setealo para funcionar de socket pasivo; false 
+en caso contrario.
+*/
+bool conectar_socket_pasivo(int *skt, const char *puerto) {
+	int estado = 0;
+    struct addrinfo hints;
+    struct addrinfo *direccion;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM; //TCP
+    hints.ai_flags = AI_PASSIVE; //AI_PASSIVE para servidor
+    estado = getaddrinfo(NULL, puerto, &hints, &direccion);
+    if (estado != 0) { 
+        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
+        return false;
+    }
+    struct addrinfo *dir = direccion;
+    *skt = socket(dir->ai_family, dir->ai_socktype, dir->ai_protocol);
+    if (*skt == -1) {
+        printf("Error: %s\n", strerror(errno));
+        freeaddrinfo(direccion);
+        return false;
+    }
+    //------------------------------------------------------
+    // Adaptado de:
+    // https://github.com/Taller-de-Programacion/clases/blob/master/sockets/src/echoserver.c
+
+    // Evita que le servidor falle al abrirlo y cerrarlo en poco tiempo
+
+    // Activamos la opcion de Reusar la Direccion en caso de que esta
+    // no este disponible por un TIME_WAIT
+    int val = 1;
+    estado = setsockopt(*skt, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(*skt);
+        freeaddrinfo(direccion);
+        return false;
+    }
+    //------------------------------------------------------
+    estado = bind(*skt, dir->ai_addr, dir->ai_addrlen);
+    freeaddrinfo(direccion);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(*skt);
+        return false;
+    }
+    estado = listen(*skt, CLIENTES_ESCUCHAR);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(*skt);
+        return false;
+    }
+    return true;
+}
+
+/*
+Pre: Recibe el nombre del archivo template a cargar,
+que en algun momento del mismo tiene la cadena de 
+caracteres: "{{datos}}".
+Post: Devuelve un arreglo de cadenas de caracteres,
+con las dos partes del texto template, antes y 
+despues de la cadena: "{{datos}}"; o NULL si ocurrio
+algun problema.
+Queda a responsabilidad del usuario liberar la memoria 
+dinamica reservada para el arreglo, por medio de la 
+funcion: void free_arreglo_punteros(void **).
+*/
+char **cargar_template(const char *ruta) {
+	FILE *archivoTemplate; 
+    if ((archivoTemplate = fopen(ruta, "rt")) == NULL) {
+        fprintf(stderr, "Archivo template no encontrado.\n");
+        return NULL;
+    }
+    char *template = cargar_archivo(archivoTemplate);
+    fclose(archivoTemplate); 
+    if (template == NULL) {
+        fprintf(stderr, "Error al cargar template.\n");
+        return NULL;
+    }
+    char **partesTemplate = split(template, "{{datos}}");
+    free(template);
+    if (partesTemplate == NULL){
+        fprintf(stderr, "Error al procesar template.\n");
+        return NULL;
+    }
+    return partesTemplate;
+}
+/*
+Pre: Recibe las dos partes del template (char **), y 
+la temperatura (double) a meter entre dichas partes.
+Post: Devuelve el cuerpo de la respuesta (char *), que
+viene a ser las dos partes del template unidas por medio
+de la temperatura recibida; o NULL si ocurrio algun error.
+Queda a responsabilidad del usuario liberar la memoria
+reservada por medio de la funcion free(); 
+*/
+char *contruir_cuerpo(char **partesTemplate, double temperatura) {
+	char buffer[TEMPERATURA_LARGO_MAXIMO];
+    size_t largoBuffer = sizeof(buffer);
+    snprintf(buffer, largoBuffer, "%.2f", temperatura);
+    size_t largoPrimera = strlen(partesTemplate[0]);
+    size_t largoSegunda = strlen(partesTemplate[1]);
+    size_t memoriaReservar; 
+    size_t largoCuerpo = largoPrimera + largoSegunda + largoBuffer + 1;
+    // + \0
+    memoriaReservar = sizeof(char)*largoCuerpo; 
+    char *cuerpo = malloc(memoriaReservar);
+    if (cuerpo == NULL) {
+        return NULL;
+    }
+    cuerpo[0] = '\0';
+    size_t largoSiguiente = largoPrimera + 1;
+    strncat(cuerpo, partesTemplate[0], largoSiguiente);
+    largoSiguiente += largoBuffer;
+    strncat(cuerpo, buffer, largoSiguiente);
+    largoSiguiente += largoSegunda;
+    strncat(cuerpo, partesTemplate[1], largoSiguiente);
+    return cuerpo;
 }
 
 int main(int argc, const char *argv[]) {
@@ -770,91 +836,17 @@ int main(int argc, const char *argv[]) {
    	const char *nombrePuerto = argv[1];
     const char *sensorBinario = argv[2];
     const char *rutaTemplate = argv[3];
-    FILE *archivoTemplate; 
-    if ((archivoTemplate = fopen(rutaTemplate, "rt")) == NULL) {
-        fprintf(stderr, "Archivo template no encontrado.\n");
-        return 1;
-    }
-    char *template = cargar_archivo(archivoTemplate);
-    fclose(archivoTemplate); 
-    if (template == NULL) {
-        fprintf(stderr, "Error al cargar template.\n");
-        return 1;
-    }
-    char **partesTemplate = partir_texto(template,"{{datos}}");
-    free(template);
-    if (partesTemplate == NULL){
-        fprintf(stderr, "Error al procesar template.\n");
-        return 1;
-    }
-    //Sockets
-    int estado = 0;
-    bool seguirEjecutando = true;
-    bool hayErrorDeAceptacion = false;
-    
-    struct addrinfo hints;
-    struct addrinfo *ptr;
-
     int sktPasivo, sktActivo = 0;
-    int val;
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;       // IPv4 (or AF_INET6 for IPv6)
-    hints.ai_socktype = SOCK_STREAM; // TCP  (or SOCK_DGRAM for UDP)
-    hints.ai_flags = AI_PASSIVE; // AI_PASSIVE for server
-    
-    estado = getaddrinfo(NULL, nombrePuerto, &hints, &ptr);
-
-    if (estado != 0) { 
-        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
-        free_arreglo_punteros((void *)partesTemplate);
-        return 1;
+	bool seConecto;
+	seConecto = conectar_socket_pasivo(&sktPasivo, nombrePuerto);
+	if (seConecto == false) {
+		return 1;
+	}
+    char **partesTemplate = cargar_template(rutaTemplate);
+    if (partesTemplate == NULL) {
+    	close(sktPasivo);
+    	return 1;
     }
-
-    sktPasivo = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-
-    if (sktPasivo == -1) {
-        printf("Error: %s\n", strerror(errno));
-        freeaddrinfo(ptr);
-        free_arreglo_punteros((void *)partesTemplate);
-        return 1;
-    }
-    //------------------------------------------------------
-    // Copiado de:
-    // https://github.com/Taller-de-Programacion/clases/blob/master/sockets/src/echoserver.c
-
-    // Evita que le servidor falle al abrilo y cerrarlo en poco tiemp
-
-    // Activamos la opcion de Reusar la Direccion en caso de que esta
-    // no este disponible por un TIME_WAIT
-    val = 1;
-    estado = setsockopt(sktPasivo, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
-    if (estado == -1) {
-        printf("Error: %s\n", strerror(errno));
-        close(sktPasivo);
-        freeaddrinfo(ptr);
-        free_arreglo_punteros((void *)partesTemplate);
-        return 1;
-    }
-    //------------------------------------------------------
-    estado = bind(sktPasivo, ptr->ai_addr, ptr->ai_addrlen);
-    if (estado == -1) {
-        printf("Error: %s\n", strerror(errno));
-        close(sktPasivo);
-        freeaddrinfo(ptr);
-        free_arreglo_punteros((void *)partesTemplate);
-        return 1;
-    }
-    freeaddrinfo(ptr);
-
-    estado = listen(sktPasivo, 15); // definir constante !!!
-    if (estado == -1) {
-        printf("Error: %s\n", strerror(errno));
-        close(sktPasivo);
-        free_arreglo_punteros((void *)partesTemplate);
-        return 1;
-    }
-
     FILE *archivoBinario; 
     if ((archivoBinario = fopen(sensorBinario, "rb")) == NULL) {
         fprintf(stderr, "Archivo binario no encontrado.\n");
@@ -869,11 +861,11 @@ int main(int argc, const char *argv[]) {
         free_arreglo_punteros((void *)partesTemplate);
         return 1;
     }
-
+    bool seguirEjecutando = true;
+    bool hayErrorDeAceptacion = false;
     uint16_t numeroLeido; 
     int cantidadLeidos;
     cantidadLeidos = fread(&numeroLeido, sizeof(short int),1,archivoBinario);
-        
     while (cantidadLeidos > 0 && seguirEjecutando) { 
         sktActivo = accept(sktPasivo, NULL, NULL);
         if (sktActivo == -1) {
@@ -883,28 +875,12 @@ int main(int argc, const char *argv[]) {
         } else {
             numeroLeido = ntohs(numeroLeido);
             double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
-            char temperatura[TEMPERATURA_LARGO_MAXIMO];
-            size_t largoBuffer = sizeof(temperatura);
-            snprintf(temperatura, largoBuffer, "%.2f", temperaturaSensada);
-            size_t largoPrimera = strlen(partesTemplate[0]);
-            size_t largoSegunda = strlen(partesTemplate[1]);
-            size_t memoriaReservar; 
-            size_t largoCuerpo = largoPrimera + largoSegunda + largoBuffer + 1;
-            memoriaReservar = sizeof(char)*largoCuerpo; 
-            // + \0
-            char *cuerpo = malloc(memoriaReservar);
-            if (cuerpo == NULL) {
-                shutdown(sktActivo, SHUT_RDWR);
+            char *cuerpo = contruir_cuerpo(partesTemplate, temperaturaSensada);
+            if (cuerpo == NULL){
+            	shutdown(sktActivo, SHUT_RDWR);
                 close(sktActivo);
                 break;
             }
-            cuerpo[0] = '\0';
-            size_t largoSiguiente = largoPrimera + 1;
-            strncat(cuerpo, partesTemplate[0], largoSiguiente);
-            largoSiguiente += largoBuffer;
-            strncat(cuerpo, temperatura, largoSiguiente);
-            largoSiguiente += largoSegunda;
-            strncat(cuerpo, partesTemplate[1], largoSiguiente);
             char *respuesta;
             respuesta = procesar_peticion(sktActivo, cuerpo, &visitantes);
             free(cuerpo);
@@ -914,11 +890,11 @@ int main(int argc, const char *argv[]) {
                 break;
             }
             size_t largoRespuesta = strlen(respuesta);
-            enviar_mensaje(sktActivo, respuesta, largoRespuesta);
+            enviar_respuesta(sktActivo, respuesta, largoRespuesta);
             shutdown(sktActivo, SHUT_RDWR);
             close(sktActivo);
             free(respuesta);
-            //Lo invierto devuelve, pues se volvera a invertir luego
+            //Lo invierto de vuelta, pues se volvera a invertir luego
             //si no entro en el if
             numeroLeido = ntohs(numeroLeido);
             if (largoRespuesta > CABECERA_lARGO_MAXIMO){
