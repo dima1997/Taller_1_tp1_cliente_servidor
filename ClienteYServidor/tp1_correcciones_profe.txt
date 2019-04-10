@@ -1,0 +1,22 @@
+
+//Cliente
+Mal implementado el recibir_respuesta(int *skt), si el recv no puede recibir todo el mensaje en una llamada el bloque anterior se pisa con el siguiente. 
+Repasar clase y codigo de ejemplos sobre sockets. 
+No implementa TDA Socket 
+enviar_peticion: implementacion compleja e innecesaria 
+Por que es necesario contabilizar los \n? 
+Si el primer enviar_parte (linea 105) retorna 5, i==5, luego haces ++i y continuas escribiendo en la posicion i==6. Entonces, en tu buffer tenes 5 datos (posiciones 0 - 4), un dato basura (posicion 5) y luego mas datos correctos (posiciones 6 - ....) 
+Simplificar el main del cliente usando TDAs 
+
+
+
+//Server
+linea_agregar_caracteres, linea 52, para que un loop? 
+Implementacion muy compleja, revisar la libreria estandar de C sobre el manejo de strings. 
+Aun asi, una simple lista enlazada hubiera servido. 
+linea_ver_caracteres: para que la copia? 
+recursosVector_visitar: implementacion muy compleja que se simplificaria usando un TDA tipo List or Vector. 
+Lo mismo aplica a "split", tiene 94 lineas de codigo, con mucho codigo copiado. 
+Idem otras funcione (ej procesar_peticion con 74 lineas) 
+Overflow: linea 461. Revisar que significa el ultimo parametro de strncat (esto se vio en el TP0) 
+Separar en TDAs! Hay mucho codigo repetido y complicado en todo el tp.

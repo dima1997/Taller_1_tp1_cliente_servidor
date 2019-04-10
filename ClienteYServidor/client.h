@@ -1,43 +1,45 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 #include <stdbool.h>
+#include "common.h"
+
+typedef struct Cliente{
+    socket_t* skt;
+} cliente_t;
 
 /*
-Pre: Recibe un socket (int *) ya contectado.
-Post: Recibe una respuesta del servidor y la imprime por
-salida estandard. Devuelve true si logro recibir todo 
-el mensaje, false en caso contrario.
+PRE: Recibe un cliente (cliente_t*) ya declarado, 
+y los nombres del host y puerto al que se conecta.
+POST: Devuelve true si logro inicializar al cliente 
+recibido, false en caso contrario.
 */
-bool recibir_respuesta(int *skt);
+bool cliente_crear(cliente_t *cliente, const char *host, const char *puerto);
 
 /*
-Pre: Recibe un socket (int *) ya conectado, la parte del
-mensaje (char *) que se intenta enviar, y el largo de 
-dicha parte.
-Post: Intenta enviar la parte del mensaje recibida. Devuelve 
-la cantidad de bytes que no se lograron enviar. Si esta 
-cantidad es -1 o menor, significa que hubo un error.
-Ademas modifica la parte recibida, dejando en ella solo los 
-caracteres correspondientes a los bytes sin enviar. 
+PRE: Recibe un cliente (cliente_t*).
+POST: Destruye al cliente.
 */
-int enviar_parte(int *skt, char* parte, int largo);
+void cliente_destruir(cliente_t *cliente);
 
 /*
-Pre: Recibe un socket (int *) ya conectado, y un archivo (FILE *)
-de texto ya abierto de donde se leera la peticion a enviar.
-Post: Envia la peticion del archivo recibido, a donde sea que 
-este conectado el socket. Devuelve true si logro enviar todo
-el mensaje; false en caso contrario dado algun error del
-socket. 
+PRE: Recibe un cliente (cliente_t*) ya inicializado,
+y el nombre de una ruta a un archivo con la peticion
+http a enviar.
+POST: Devuelve true si logro enviar la peticion a traves 
+del puerto al que se conecta el cliente, false en caso
+de la gun error. 
+Si la ruta recibida es NULL, lee la peticion desde
+la entrada estandard (stdin).
 */
-bool enviar_peticion(int *skt, FILE *archivo);
+bool cliente_enviar_peticion(cliente_t *cliente,const char *rutaPeticion);
 
 /*
-Pre: Recibe un socket (int *), y los nombres (char *) 
-del host y puerto al que se desea conectar.
-Post: Devuelve true si logro se logro conectarse con exito, 
-false en caso contrario.
+PRE: Recibe un cliente (cliente_t*) ya inicializado. 
+POST: Recibe una respuesta desde el puerto al que esta
+conectado, y la imprime por salida estandard.
+Devuelve true, si se logro lo anterior, false en contrario,
+dado algun error.
 */
-bool conectar_socket(int *skt, const char* host, const char* puerto);
+bool cliente_recibir_respuesta(cliente_t *cliente);
 
 #endif // CLIENT_H
