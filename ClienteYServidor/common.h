@@ -28,6 +28,29 @@ puerto al que se desea conectar el socket.
 */
 bool socket_conectar(socket_t* skt, const char* host, const char* puerto);
 
+
+/*
+Metodo para Servidor.
+PRE: Recibe un socket (socket_t *) ya creado, y el
+nombre (char *) de un puerto al cual enlazarlo.
+POST: Configura al socket para que funcion de 
+forma PASIVA, es decir, se lo enlaza al puerto de
+nombre recibido. 
+Devuelve true, si logro lo anterior, false en caso
+contrario.
+*/
+bool socket_enlazar(socket_t *skt, const char *puerto);
+
+/*
+Metodo para Servidor.
+PRE: Recibe una socket (socket_t *) ya enlazado a algun puerto,
+y la cantidad de sockets entrantes a escuchar.
+POST: Pone a escuchar, al socket recibido, la cantidad de 
+recibida de sockets entrantes.
+Devuelve true, si logro lo anterior, false en caso contrario.
+*/
+bool socket_escuchar(socket_t *skt, size_t cuantosEscuchar);
+
 /*
 PRE: Recibe un socket ya conectado (socket_t*), y
 el modo en que se desea cerrar al socket:

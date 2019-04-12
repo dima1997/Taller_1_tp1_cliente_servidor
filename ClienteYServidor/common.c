@@ -21,14 +21,16 @@ void socket_crear(socket_t *skt) {
     skt->skt = -1;
 }
 
-
 /*
 PRE: Recibe un socket ya creado.
 POST: Destruye el socket.
 */
 
 void socket_destruir(socket_t* skt) {
-    //No hace nada.
+    if (skt->skt != -1) {
+        shutdown(skt->skt, SHUT_RDWR);
+        close(skt->skt);
+    }
 }
 
 
@@ -70,6 +72,91 @@ bool socket_conectar(socket_t* skt, const char* host, const char* puerto) {
     freeaddrinfo(direcciones);
     return estamosConectados;
 }
+
+/*
+Metodo para Servidor.
+PRE: Recibe un socket (socket_t *) ya creado, y el
+nombre (char *) de un puerto al cual enlazarlo.
+POST: Configura al socket para que funcion de 
+forma PASIVA, es decir, se lo enlaza al puerto de
+nombre recibido. 
+Devuelve true, si logro lo anterior, false en caso
+contrario.
+*/
+bool socket_enlazar(socket_t *skt, const char *puerto){
+    int estado = 0;
+    struct addrinfo hints;
+    struct addrinfo *direccion;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM; //TCP
+    hints.ai_flags = AI_PASSIVE; //AI_PASSIVE para servidor
+    estado = getaddrinfo(NULL, puerto, &hints, &direccion);
+    if (estado != 0) { 
+        printf("Error in getaddrinfo: %s\n", gai_strerror(estado));
+        return false;
+    }
+    struct addrinfo *dir = direccion;
+    skt->skt = socket(dir->ai_family, dir->ai_socktype, dir->ai_protocol);
+    if (skt->skt == -1) {
+        printf("Error: %s\n", strerror(errno));
+        freeaddrinfo(direccion);
+        return false;
+    }
+    // Evita que le servidor falle al abrirlo y cerrarlo en poco tiempo
+    int val = 1;
+    estado = setsockopt(skt->skt, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(skt->skt);
+        freeaddrinfo(direccion);
+        return false;
+    }
+    estado = bind(skt->skt, dir->ai_addr, dir->ai_addrlen);
+    freeaddrinfo(direccion);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(skt->skt);
+        return false;
+    }
+    return true;
+}
+
+/*
+Metodo para Servidor.
+PRE: Recibe una socket (socket_t *) ya enlazado a algun puerto,
+y la cantidad de sockets entrantes a escuchar.
+POST: Pone a escuchar, al socket recibido, la cantidad de 
+recibida de sockets entrantes.
+Devuelve true, si logro lo anterior, false en caso contrario.
+*/
+bool socket_escuchar(socket_t *skt, size_t cuantosEscuchar){
+   int estado = listen(skt->skt, cuantosEscuchar);
+    if (estado == -1) {
+        printf("Error: %s\n", strerror(errno));
+        close(skt->skt);
+        return false;
+    }
+    return true;    
+}
+
+/*
+PRE: Recibe dos socket (socke_t *): el primero esta configurado 
+como PASIVO (se ejecutaron metodos socket_enlazar y ..._escuchar),
+y el segundo (ya creado) para ser configurado como ACTIVO. 
+POST: Devuelve true si logro aceptar una nueva comunicacion y
+configurar al socket ACTIVO para la misma, o false en caso 
+contrario. 
+*/
+bool socket_aceptar(socket_t *sktPasivo, socket_t *sktActivo) {
+    sktActivo->skt = accept(sktPasivo->skt, NULL, NULL);
+    if (sktActivo->skt == -1) {
+        printf("Error: %s\n", strerror(errno));
+        return false;
+    }
+    return true; 
+}
+
 
 /*
 PRE: Recibe un socket ya conectado (socket_t*), y

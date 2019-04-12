@@ -20,7 +20,8 @@ POST: Devuelve true si logro inicializar al cliente
 recibido, false en caso contrario.
 */
 bool cliente_crear(cliente_t *cliente, const char *host, const char *puerto){
-    cliente->skt = malloc(sizeof(socket_t));
+    cliente->skt = malloc(sizeof(socket_t)); 
+    // no es necesario, creo que puedo hacer que cliente tenga directamente un socket y no un puntero
     if (cliente->skt == NULL) {
         return false;
     }
