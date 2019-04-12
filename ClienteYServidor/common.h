@@ -52,6 +52,16 @@ Devuelve true, si logro lo anterior, false en caso contrario.
 bool socket_escuchar(socket_t *skt, size_t cuantosEscuchar);
 
 /*
+PRE: Recibe dos socket (socke_t *): el primero esta configurado 
+como PASIVO (se ejecutaron metodos socket_enlazar y ..._escuchar),
+y el segundo (ya creado) para ser configurado como ACTIVO. 
+POST: Devuelve true si logro aceptar una nueva comunicacion y
+configurar al socket ACTIVO para la misma, o false en caso 
+contrario. 
+*/
+bool socket_aceptar(socket_t *sktPasivo, socket_t *sktActivo); 
+
+/*
 PRE: Recibe un socket ya conectado (socket_t*), y
 el modo en que se desea cerrar al socket:
 SHUT_RD, SHUT_WR, SHUT_RDWR

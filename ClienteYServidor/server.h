@@ -23,7 +23,7 @@ typedef struct ListaEnlazada {
 } lista_t;
 
 typedef struct Vector{
-    void **datos;
+    char *datos;
     size_t largo;
 } vector_t;
 
@@ -123,7 +123,7 @@ para destruir los datos que alamacena, o NULL en caso de no
 ser necesario
 POST: Destruye el vector.
 */
-void vector_destruir(vector_t *vector, void destruir_dato(void *dato));
+void vector_destruir(vector_t *vector);//, void destruir_dato(void *dato));
 
 bool vector_redimensionar(vector_t *vector, size_t nuevoLargo);
 
@@ -133,7 +133,7 @@ PRE: Recibe un vector (vector_t *) ya creado y una posicion
 POST: Devuelve el dato (void *) asociado al mismo, o NULL
 si se fue de rango.
 */
-void *vector_ver(vector_t *vector, size_t posicion);
+char *vector_ver(vector_t *vector, size_t posicion);
 
 /*
 PRE: Recibe un vector (vector_t *) ya creado y una posicion 
@@ -141,7 +141,7 @@ PRE: Recibe un vector (vector_t *) ya creado y una posicion
 POST: Devuelve true si logro insertar el dato en la posicion
 indicada, o false en caso de algun error, o fuera de rango.
 */
-bool vector_insertar(vector_t *vector, size_t posicion, void *dato);
+bool vector_insertar(vector_t *vector, size_t posicion, char dato);
 
 /*
 Wrapeer de visitante_destruir para lista enlazada
@@ -186,7 +186,7 @@ momento, bajo el siguiente formato:
   .
 * <nombre-visitante-n>: <cantidad de visitas> 
 */
-void servidor_imprimir_visitas(servidor_t servidor);
+void servidor_imprimir_visitas(servidor_t *servidor);
 
 bool son_mismo_caracter_wrapper(void *dato1, void *dato2);
 

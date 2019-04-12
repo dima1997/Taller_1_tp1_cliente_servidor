@@ -23,6 +23,7 @@ POST: Inicializa la lista.
 void lista_crear(lista_t *lista) {
     lista->primero = NULL;
     lista->ultimo = NULL;
+    lista->largo = 0;
 }
 
 /*
@@ -60,10 +61,10 @@ bool lista_insertar_ultimo(lista_t *lista, void* dato){
     nuevoNodo->proximo = NULL;
     if (lista->primero == NULL){
         lista->primero = nuevoNodo;
-        lista->ultimo = nuevoNodo;
     } else {
         lista->ultimo->proximo = nuevoNodo;
     }
+    lista->ultimo = nuevoNodo;
     lista->largo += 1;
     return true;
 } 
@@ -84,7 +85,7 @@ void *lista_borrar_primero(lista_t *lista){
     if (lista->largo == 1){
         lista->ultimo = lista->primero;
     }
-    lista->largo -= 0;
+    lista->largo -= 1;
     return dato;
 }
 
@@ -156,6 +157,26 @@ bool lista_agregar(lista_t *lista, void **buffer, size_t largo){
     }
     return true;
 }
+/*
+PRE: ...
+POST: ...
+*/
+bool agregar_a_lista(lista_t* lista, char *buffer, size_t largo){
+    for (int i = 0; i < largo; ++i){
+        char *caracter = malloc(sizeof(char));
+        if (caracter == NULL){
+            return false;
+        }
+        *caracter = buffer[i];
+        bool seInserto;
+        seInserto = lista_insertar_ultimo(lista, caracter); //OJO
+        if (!seInserto){
+            free(caracter);
+            return false;
+        }
+    }
+    return true;
+}
 
 /*
 PRE: Recibe un vector (vector_t *) ya declarado, y el
@@ -167,13 +188,15 @@ bool vector_crear(vector_t *vector, size_t largo){
     if (largo == 0){
         return false;
     }
-    vector->datos = malloc(sizeof(void*)*largo);
-    if (vector->datos){
+    vector->datos = malloc(sizeof(char)*largo);
+    if (vector->datos == NULL){
         return false;
     }
+    
     for(int i = 0; i < largo; ++i){
-        vector->datos[i] = NULL;
+        vector->datos[i] = 0;
     }
+    
     vector->largo = largo;
     return true;
 }
@@ -192,10 +215,11 @@ para destruir los datos que alamacena, o NULL en caso de no
 ser necesario
 POST: Destruye el vector.
 */
-void vector_destruir(vector_t *vector, void destruir_dato(void *dato)){
+void vector_destruir(vector_t *vector){//, void destruir_dato(void *dato)){
     if (vector->datos == NULL){
         return;
     }
+    /*
     size_t largo = vector_ver_largo(vector);
     if (destruir_dato == NULL){
         free(vector->datos);
@@ -207,21 +231,25 @@ void vector_destruir(vector_t *vector, void destruir_dato(void *dato)){
             destruir_dato(datoActual);
         }
     }
+    */
+    free(vector->datos);
 }
 
 bool vector_redimensionar(vector_t *vector, size_t nuevoLargo){
     if (vector == NULL || nuevoLargo <= 0){
         return false;
     }
-    size_t memoriaReservar = sizeof(void*)*nuevoLargo;
-    void **nuevosDatos = realloc(vector->datos, memoriaReservar);
+    size_t memoriaReservar = sizeof(char)*nuevoLargo;
+    char *nuevosDatos = realloc(vector->datos, memoriaReservar);
     if (nuevosDatos == NULL){
         return false;
     }
     vector->datos = nuevosDatos;
+    
     for(int i = vector->largo; i < nuevoLargo; ++i){
-        vector->datos[i] = NULL;
+        vector->datos[i] = 0;
     }
+    
     vector->largo = nuevoLargo;
     return true;
 }
@@ -232,11 +260,11 @@ PRE: Recibe un vector (vector_t *) ya creado y una posicion
 POST: Devuelve el dato (void *) asociado al mismo, o NULL
 si se fue de rango.
 */
-void *vector_ver(vector_t *vector, size_t posicion){
+char *vector_ver(vector_t *vector, size_t posicion){
     if (vector->largo <= posicion){
         return NULL;
     }
-    return vector->datos[posicion];
+    return &vector->datos[posicion];
 }
 
 /*
@@ -245,12 +273,15 @@ PRE: Recibe un vector (vector_t *) ya creado y una posicion
 POST: Devuelve true si logro insertar el dato en la posicion
 indicada, o false en caso de algun error, o fuera de rango.
 */
-bool vector_insertar(vector_t *vector, size_t posicion, void *dato){
+bool vector_insertar(vector_t *vector, size_t posicion, char dato){
     if (vector->largo <= posicion){
         return false;
     }
     vector->datos[posicion] = dato;
+    return true;
 }
+
+
 
 /*
 Wrapeer de visitante_destruir para lista enlazada
@@ -270,8 +301,8 @@ bool servidor_crear(servidor_t *servidor, const char *puerto, char *template){
     lista_crear(&servidor->visitas);
     socket_crear(&servidor->skt);
     bool todoOK;
-    todoOK = socket_enlazar(&servidor->skt);
-    if (!todoOk){
+    todoOK = socket_enlazar(&servidor->skt, puerto);
+    if (!todoOK){
         lista_destruir(&servidor->visitas, visitante_destruir_wrapper);
         socket_destruir(&servidor->skt);
     }
@@ -289,7 +320,7 @@ para destruir el template, o NULL si no es necesario.
 POST: Destruye el servidor.
 */
 void servidor_destruir(servidor_t *servidor, void destruir_template(char*)){
-    lista_destruir(&servidor->visitantes, visitante_destruir);
+    lista_destruir(&servidor->visitas, visitante_destruir_wrapper);
     socket_destruir(&servidor->skt);
     if (destruir_template){
         destruir_template(servidor->template);
@@ -305,11 +336,11 @@ bajo la forma:
 void imprimir_visitante(visitante_t *visitante){
     char *nombre = visitante_ver_nombre(visitante);
     size_t cantidadVisitas = visitante_ver_visitas(visitante);
-    fprintf(stdout, "* %s: %d\n", nombre, cantidadVisitas);
+    fprintf(stdout, "* %s: %d\n", nombre, (int)cantidadVisitas);
 }
 
 bool imprimir_visitante_wrapper(void *dato1, void*dato2){
-    visitante_t*vistante = (visitante_t*)dato1;
+    visitante_t *visitante = (visitante_t*)dato1;
     imprimir_visitante(visitante);
     return true;
 }
@@ -327,17 +358,17 @@ momento, bajo el siguiente formato:
   .
 * <nombre-visitante-n>: <cantidad de visitas> 
 */
-void servidor_imprimir_visitas(servidor_t servidor){
+void servidor_imprimir_visitas(servidor_t *servidor){
     fprintf(stdout,"#Estadisticas de visitantes:\n\n");
-    lista_iterar(&servidor->visitantes, imprimir_visitante_wrapper, NULL)
+    lista_iterar(&servidor->visitas, imprimir_visitante_wrapper, NULL);
 }
 
 bool son_mismo_caracter_wrapper(void *dato1, void *dato2){
-    return son_mismo_caracter((char*)d1, (char*)d2);
+    return son_mismo_caracter((char*)dato1, (char*)dato2);
 }
 
-bool son_mismo_caracter(char *caracer1, char *caracter2){
-    return (*caracter1 == *caracter2)
+bool son_mismo_caracter(char *caracter1, char *caracter2){
+    return (*caracter1 == *caracter2);
 }
 
 /*
@@ -352,14 +383,15 @@ bool servidor_enviar_cuerpo(servidor_t *svr, socket_t* skt, double temperatura){
     size_t largoBuffer = TEMPERATURA_LARGO_MAXIMO;
     snprintf(temperaturaBuffer, largoBuffer, "%.2f", temperatura);
     char *sustituto = "{{datos}}";
-    char *posSustituto = strstr(servidor->template, sustituto);
-    size_t largo = posSustituto - (servidor->template);
+    char *posSustituto = strstr(svr->template, sustituto);
+    size_t largo = posSustituto - (svr->template);
     bool seEnvio;
-    seEnvio = socket_enviar_todo(skt, servidor->template, largo)
+    seEnvio = socket_enviar_todo(skt, svr->template, largo);
     if (!seEnvio){
         return false;
     }
-    seEnvio = socket_enviar_todo(skt, temperaturaBuffer, largoBuffer);
+    largoBuffer = strlen(temperaturaBuffer); 
+    seEnvio = socket_enviar_todo(skt, temperaturaBuffer,largoBuffer); 
     if (!seEnvio){
         return false;
     }
@@ -385,7 +417,7 @@ peticion_t servidor_procesar_cabecera(servidor_t *svr, socket_t *skt, char *line
     size_t i;
     char **argumentosMetodo = split(linea, " ");
     if (argumentosMetodo == NULL) {
-        return NULL;
+        return PETICION_ERROR;
     }
     char *metodo = argumentosMetodo[0];
     for (i=0; argumentosMetodo[i]!=NULL; ++i) {}
@@ -415,7 +447,7 @@ peticion_t servidor_procesar_cabecera(servidor_t *svr, socket_t *skt, char *line
 }
 
 bool es_este_visitante(visitante_t* visitante, char* nombre){
-    char *nombreVistante = visitante_ver_nombre(visitante1);
+    char *nombreVistante = visitante_ver_nombre(visitante);
     return strcmp(nombreVistante, nombre) == 0;
 }
 
@@ -426,8 +458,8 @@ bool es_este_visitante_wrapper(void *dato1, void* dato2){
 }
 
 bool visitar_si_es_este(visitante_t* visitante, char* nombre){
-    if (es_este_visitante(vistante, nombre)){
-        visitante_visitar(vistante);
+    if (es_este_visitante(visitante, nombre)){
+        visitante_visitar(visitante);
         return true;
     }
     return false;
@@ -447,10 +479,10 @@ Devuelve true, si logro realizar lo anterior con exito, false
 en caso contrario. 
 */
 bool servidor_agregar_visita(servidor_t *servidor, char* nombre){
-    lista_t *visitantes = &servidor->visitantes;
-    if (lista_esta(visitantes, son_mismo_visitante_wrapper, nombre)){
+    lista_t *visitas = &servidor->visitas;
+    if (lista_esta(visitas, es_este_visitante_wrapper, nombre)){
         void *nombreWrapper = (void*)nombre;
-        lista_iterar(visitantes, visitar_si_es_este_wrapper, nombreWrapper);
+        lista_iterar(visitas, visitar_si_es_este_wrapper, nombreWrapper);
         return true;
     }
     visitante_t *nuevoVisitante = malloc(sizeof(visitante_t));
@@ -459,11 +491,11 @@ bool servidor_agregar_visita(servidor_t *servidor, char* nombre){
     }
     bool todoOK;
     todoOK = visitante_crear(nuevoVisitante, nombre);
-    if (!seCreo){
+    if (!todoOK){
         free(nuevoVisitante);
     }
     visitante_visitar(nuevoVisitante);
-    todoOK = lista_insertar_ultimo(visitantes, (void*)nuevoVisitante);
+    todoOK = lista_insertar_ultimo(visitas, (void*)nuevoVisitante);
     if (!todoOK){
         visitante_destruir(nuevoVisitante);
         free(nuevoVisitante);
@@ -520,37 +552,43 @@ char* obtener_linea(lista_t *caracteres){
         return NULL;
     }
     vector_t vector;
+    size_t largoVector = 30;
     bool seCreo;
-    seCreo = vector_crear(vector);
+    seCreo = vector_crear(&vector, largoVector);
     if (!seCreo){
         return NULL;
     }
-    char *caracterActual = lista_borrar_primero(lista);
+    char *caracterActual = (char *)lista_borrar_primero(caracteres);
     size_t i = 0;
     while (*caracterActual != '\n'){
-        size_t largo = vector_ver_largo(&vector); 
-        if (largo <= i){
+        largoVector = vector_ver_largo(&vector); 
+        if (largoVector <= i){
             bool seRedimensiono;
-            size_t nuevoLargo = largo * factorRedimensionar;
+            size_t nuevoLargo = largoVector * factorRedimensionar;
             seRedimensiono = vector_redimensionar(&vector, nuevoLargo);
             if (!seRedimensiono){
-                vector_destruir(&vector, NULL);
+                vector_destruir(&vector);//, free);
                 return NULL;
             }
         }
-        vector_insertar(&vector, i, (void*)caracterActual); // OJO
+        vector_insertar(&vector, i, *caracterActual);
+        free(caracterActual); // OJO
         ++i;
+        caracterActual = (char *)lista_borrar_primero(caracteres);
     }
+    free(caracterActual);
+    //Podemos hacer un metodo de vector que haga esto
     char *linea = malloc(sizeof(char)*(i+1)); // +\0
     if (linea == NULL){
-        vector_destruir(vector);
+        vector_destruir(&vector);//, free);
         return NULL;
     }
     linea[i] = 0;
     for (int j = 0; j < i; ++j){
-        char* caracterActual = (char*)vector_ver(vector, i);
-        linea[i]= *caracterActual;
+        char* caracterActual = vector_ver(&vector, j);
+        linea[j] = *caracterActual;
     }
+    vector_destruir(&vector);//, free);
     return linea;
 
 }
@@ -566,25 +604,27 @@ PETICION_ERROR: ocurrio un error.
 peticion_t servidor_recibir_peticion(servidor_t *servidor, socket_t *sktActivo){
     peticion_t resultado = PETICION_VALIDA;
     lista_t caracteres;
-    lista_crear(caracteres);
+    lista_crear(&caracteres);
     char paquete[PAQUETE_LARGO_MAXIMO];
     size_t largo = PAQUETE_LARGO_MAXIMO;
     int bytesRecibidos = 1; // > 0 //Para iniciar el ciclo
+    size_t numeroLinea = 1;
     while (bytesRecibidos > 0) {
-        bytesRecibidos = socket_recibir_algo(&sktActivo, paquete, largo);
+        bytesRecibidos = socket_recibir_algo(sktActivo, paquete, largo);
         bool todoOK;
-        todoOK = lista_agregar(&caracteres, (void*)paquete, largo); // mmm...
+        todoOK = agregar_a_lista(&caracteres, paquete, bytesRecibidos);
+        //todoOK = lista_agregar(&caracteres, (void*)paquete, largo); // mmm...
         if (!todoOK){
             resultado = PETICION_ERROR;
             break;
         }
-        while (lista_esta(parte, son_mismo_caracter_wrapper, "\n")){
-            char *linea = obtener_linea(caracteres);
+        while (lista_esta(&caracteres, son_mismo_caracter_wrapper, "\n")){
+            char *linea = obtener_linea(&caracteres);
             if (numeroLinea <= 1){
-                resultado = servidor_procesar_cabecera(servidor, sktActivo, caracteres);
+                resultado = servidor_procesar_cabecera(servidor, sktActivo, linea);
                 numeroLinea += 1;
             } else if (resultado == PETICION_VALIDA) {
-                todoOK = servidor_procesar_cuerpo(servidor, caracteres);
+                todoOK = servidor_procesar_cuerpo(servidor, linea);
             }
             free(linea);
             if (!todoOK){
@@ -596,7 +636,7 @@ peticion_t servidor_recibir_peticion(servidor_t *servidor, socket_t *sktActivo){
             break;
         }
     }
-    lista_destruir(lista, NULL);
+    lista_destruir(&caracteres, free);
     return resultado;
 }
 
@@ -616,30 +656,29 @@ bool servidor_aceptar_clientes(servidor_t *servidor, const char *nombreBin){
         fprintf(stderr, "Archivo binario no encontrado.\n");
         return false;
     }
+    uint16_t numeroLeido;
+    size_t largoDato = sizeof(short int);
+    fread(&numeroLeido,largoDato,1,sensor);
     bool todoOK = true;
-    while (!sensor.eof() && todoOK) {
+    while (!feof(sensor) && todoOK) {
         socket_t sktActivo;
-        bool seAcepto;
-        seAcepto socket_aceptar(servidor->skt, &sktActivo);
-        if (!seAcepto) {
-            todoOK = false;
+        todoOK = socket_aceptar(&servidor->skt, &sktActivo);
+        if (!todoOK) {
             break;
         }
-        int tipoPeticion;
-        tipoPeticion = servidor_recibir_peticion(servidor, &sktActivo);
-        if (tipoPeticion == PETICION_ERROR){
+        peticion_t resultado;
+        resultado = servidor_recibir_peticion(servidor, &sktActivo);
+        if (resultado == PETICION_ERROR){
             todoOK = false;
-        } else if (tipoPeticion == PETICION_VALIDA){
-            uint16_t numeroLeido;
-            size_t largoDato = sizeof(short int);
-            fread(&numeroLeido,largoDato,1,sensor);
+        } else if (resultado == PETICION_VALIDA){
             numeroLeido = ntohs(numeroLeido);
-            double temperaturaSensada = (numeroLeido - 2000.00)/100.00;
+            double temperatura = (numeroLeido - 2000.00)/100.00;
             bool seEnvio;
-            seEnvio = servidor_enviar_cuerpo(servidor, temperaturaSensada);
+            seEnvio = servidor_enviar_cuerpo(servidor, &sktActivo, temperatura);
             if (!seEnvio){
                 todoOK = false;
             }
+            fread(&numeroLeido,largoDato,1,sensor);
         }
         socket_destruir(&sktActivo);
     }
@@ -908,7 +947,7 @@ void recursosVector_imprimir(recursosVector_t *vector) {
         fprintf(stdout, "* %s: %d\n", nombreActual, vecesVisitado);
     }
 }
-/*
+*/
 /*
 Destruye el recursosVector_t.
 Pre: Recibe un vector de recursos visitados (recursosVector_t *)
@@ -1479,24 +1518,29 @@ int main(int argc, const char *argv[]) {
    	const char *nombrePuerto = argv[1];
     const char *sensorBinario = argv[2];
     const char *rutaTemplate = argv[3];
-    char *template = cargar_archivo(rutaTemplate);
+    FILE* templateFichero = fopen(rutaTemplate, "rt");
+    if (templateFichero == NULL){
+        return 1;
+    }
+    char *template = cargar_archivo(templateFichero);
+    fclose(templateFichero);
     if (template == NULL){
         return 1;
     }
     servidor_t servidor;
     bool todoOK;
-    todoOK = servidor_crear(servidor, nombrePuerto, template);
+    todoOK = servidor_crear(&servidor, nombrePuerto, template);
     if (!todoOK){
         free(template);
         return 1;
     }
-    todoOK = servidor_aceptar_clientes(servidor, sensorBinario);
+    todoOK = servidor_aceptar_clientes(&servidor, sensorBinario);
     free(template);
     if (!todoOK){
         return 1;
     }
-    servidor_imprimir_visitas(servidor);
-    servidor_destruir(servidor);
+    servidor_imprimir_visitas(&servidor);
+    servidor_destruir(&servidor, NULL);
     return 0;
     /*
     //Conectamos socket pasivo.
